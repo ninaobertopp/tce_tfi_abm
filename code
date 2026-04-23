@@ -18,7 +18,7 @@ import javax.imageio.ImageIO;
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
     public static final double STEPS = (28 * 24.0);
-    public static boolean VISUALS = true; // turns visual output on/off
+    public static boolean VISUALS = false; // turns visual output on/off
 
     public static final int activeTcell = 1;      // active CD8 T cells
     public static final int exhaustedTcells = 4;  // exhausted CD8 T cells
@@ -261,10 +261,14 @@ class gridLattice extends AgentGrid2D<agentLattice> {
         String date_time = dateFormat.format(now);
         int N_RUNS = 50; // number of stochastic replicates
 
+        double totalTime = 0;
+        double minTime = Double.MAX_VALUE;
+        double maxTime = 0;
+
         for (int run = 0; run < N_RUNS; run++) {
             // LOG SEED
             System.out.println("=== RUN " + run + " | SEED: " + run + " ===");
-
+            long runStart = System.nanoTime();  // START TIMER
             double day = 1;
             String save = "";
             String VASC_ARCH_PATH = "";
@@ -339,11 +343,26 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                 }
             }
             g.output.Close();
+
+            long runEnd = System.nanoTime();
+            double seconds = (runEnd - runStart) / 1e9;
+            System.out.printf("Run %d runtime: %.2f seconds%n", run + 1, seconds);
+
+
+            totalTime += seconds;
+            minTime = Math.min(minTime, seconds);
+            maxTime = Math.max(maxTime, seconds);
+
             if (VISUALS) {
                 win.Close();
                 gm_Cell_vis.Close();
             }
         }
+        double avgTime = totalTime / N_RUNS;
+        System.out.printf("Average runtime: %.2f seconds%n", avgTime);
+        System.out.printf("Range: %.2f – %.2f seconds%n", minTime, maxTime);
+        System.out.printf("Total time: %.2f seconds (%.2f minutes)%n",
+                totalTime, totalTime / 60.0);
     }
 }
 
@@ -407,7 +426,8 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                 this.hours_since_activation = 0;
                 this.SetCellColor(); // Update cell color after type change
             }
-            for (int run = 0; run < 3; run++) {
+// Each T cell performs up to 3 movement/interaction attempts per timestep
+            for (int attempt = 0; attempt < 3; attempt++) {
                 int[] movdivHood = MooreHood(true); // for division and movement
                 int emptyNeighbors = MapEmptyHood(movdivHood); // mapping empty spots
                 if (emptyNeighbors > 0) {
@@ -476,7 +496,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                     if (target != null && target.type == Tumor && this.hours_since_kill >= 12) {
                         boolean canKill = false;
 
-                        // 5% chance to kill tumor cells
+                        // 3% chance to kill tumor cells
                         if (G.rn.Double() < 0.03) {
                             canKill = true;
                         }
