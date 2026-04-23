@@ -17,7 +17,7 @@ import javax.imageio.ImageIO;
 //////////////
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
-    public static final double STEPS = (28 * 24.0);
+    public static final double STEPS = (42 * 24.0);
     public static boolean VISUALS = false; // turns visual output on/off
 
     public static final int activeTcell = 1;      // active CD8 T cells
@@ -506,10 +506,13 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                             this.tcellKills += 1;
                             this.hours_since_kill = 0;
 
+                            double EXH_INCREMENT_BASE = 0.5;
+                            double EXH_TCE_FACTOR = 2.0;
+
                             if (G.TCE_ON) {
-                                this.pd_1 += 1.0;
+                                this.pd_1 += EXH_INCREMENT_BASE * EXH_TCE_FACTOR;
                             } else {
-                                this.pd_1 += 0.5;
+                                this.pd_1 += EXH_INCREMENT_BASE;
                             }
                             if (emptyNeighbors > 0 && this.hours_since_division >= 5) {//SENSITIVITY ANALYSIS range 5-28h (paper: "Heritable changes in division speed accompany the diversification of single T cell fate")
                                 double divProbScale = 0.35 * (Math.max(0.0, 1.0 - (this.G.cached_CD8_TIL_count / (this.G.xDim * this.G.yDim))));
