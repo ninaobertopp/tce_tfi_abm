@@ -18,7 +18,7 @@ import javax.imageio.ImageIO;
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
     public static final double STEPS = (42 * 24.0);
-    public static boolean VISUALS = false; // turns visual output on/off
+    public static boolean VISUALS = true; // turns visual output on/off
 
     public static final int activeTcell = 1;      // active CD8 T cells
     public static final int exhaustedTcells = 4;  // exhausted CD8 T cells
@@ -47,8 +47,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // The matching entry in TCE_Duration defines how long TCE remains on.
 //
 // Example shown: TFI_7 schedule (7 days on, 7 days off, repeated)
-    double[] TCE_start = {1, 15};      // TCE on during Days 1–7 and 15–21
-    double[] TCE_Duration = {7, 7};    // each treatment period lasts 7 days
+    double[] TCE_start = {1};      // TCE on during Days 1–7 and 15–21
+    double[] TCE_Duration = {42};    // each treatment period lasts 7 days
 
     /* Alternative schedules:
 
@@ -172,7 +172,42 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
         return counts;
     }
+    public void ResetTumorsToETRatio(double targetRatio) {
+        // targetRatio = tumor cells per T cell, e.g. 4.0 for E:T = 1:4
 
+        int tCellCount = 0;
+
+        for (agentLattice c : this) {
+            if (c.type == activeTcell || c.type == inactiveTcell || c.type == exhaustedTcells) {
+                tCellCount++;
+            }
+        }
+
+        for (agentLattice c : this) {
+            if (c.type == Tumor) {
+                c.Dispose();
+            }
+        }
+
+        int targetTumorCells = (int)(targetRatio * tCellCount);
+
+        int emptySites = (xDim * yDim) - tCellCount;
+        targetTumorCells = Math.min(targetTumorCells, emptySites);
+
+        for (int i = 0; i < targetTumorCells; i++) {
+            int x, y;
+            do {
+                x = rn.Int(xDim);
+                y = rn.Int(yDim);
+            } while (GetAgent(x, y) != null);
+
+            agentLattice tumor = NewAgentSQ(x, y);
+            tumor.type = Tumor;
+            tumor.SetCellColor();
+        }
+
+        totalTumorCells = targetTumorCells;
+    }
     public void RecordOut(FileIO writeHere, int time, double[] cts, boolean tceOnFlag) {
         writeHere.Write(time + ",");
         for (int i = 0; i < cts.length; i++) {
@@ -228,6 +263,14 @@ class gridLattice extends AgentGrid2D<agentLattice> {
         // ✅ Daily logic (only every 24 hours)
         if (timeStep % 24 == 0 && timeStep != 0) {
 
+            int currentDay = (int)(timeStep / 24);
+            
+
+            // Reset tumor cells every 7 days (Day 7, 14, 21, 28, 35, ...)
+            if (timeStep % (7 * 24) == 0) {
+                ResetTumorsToETRatio(4.0);
+            }
+
             // === T cell reversion (active → inactive) based on half-life decay ===
             if (!TCE_ON) {
                 for (agentLattice cell : this) {
@@ -255,7 +298,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     ////////
     public static void main (String[]args) throws IOException {
         //TIME STAMP
-        String simLabel = "TCE_TFI7_28days";
+        String simLabel = "TCE_CONT_28days";
         java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_SS");
         java.util.Date now = new java.util.Date();
         String date_time = dateFormat.format(now);
@@ -515,7 +558,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                                 this.pd_1 += EXH_INCREMENT_BASE;
                             }
                             if (emptyNeighbors > 0 && this.hours_since_division >= 5) {//SENSITIVITY ANALYSIS range 5-28h (paper: "Heritable changes in division speed accompany the diversification of single T cell fate")
-                                double divProbScale = 0.35 * (Math.max(0.0, 1.0 - (this.G.cached_CD8_TIL_count / (this.G.xDim * this.G.yDim))));
+                                double divProbScale = 0.35;
 
                                 if (G.rn.Double() < divProbScale) {
                                     for (int i = 0; i < emptyNeighbors; i++) {
