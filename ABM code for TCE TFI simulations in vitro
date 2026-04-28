@@ -30,8 +30,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     public int tumorKillsToday = 0;
 
     // Tumor dynamics (per hour probabilities)
-    final static double Tumor_PROLIFERATION_PROB = 1.0 / 24.0;  // ≈ one division per day (literature-informed; sensitivity range tested)
-    final static double Tumor_DEATH_PROB = 1.0 / 132.0;         // low baseline apoptosis rate
+    final static double Tumor_PROLIFERATION_PROB = 0.0; //1.0 / 24.0;  // ≈ one division per day (literature-informed; sensitivity range tested)
+    final static double Tumor_DEATH_PROB = 0.0; //1.0 / 132.0;         // low baseline apoptosis rate
 
     // Exhausted T cell death rate (per hour)
     // Calibrated to yield ~40% cumulative death over 10 days (240 h),
@@ -264,7 +264,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
         if (timeStep % 24 == 0 && timeStep != 0) {
 
             int currentDay = (int)(timeStep / 24);
-            
+
 
             // Reset tumor cells every 7 days (Day 7, 14, 21, 28, 35, ...)
             if (timeStep % (7 * 24) == 0) {
@@ -558,7 +558,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                                 this.pd_1 += EXH_INCREMENT_BASE;
                             }
                             if (emptyNeighbors > 0 && this.hours_since_division >= 5) {//SENSITIVITY ANALYSIS range 5-28h (paper: "Heritable changes in division speed accompany the diversification of single T cell fate")
-                                double divProbScale = 0.35;
+                                double divProbScale = 0.01;
 
                                 if (G.rn.Double() < divProbScale) {
                                     for (int i = 0; i < emptyNeighbors; i++) {
