@@ -298,7 +298,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     ////////
     public static void main (String[]args) throws IOException {
         //TIME STAMP
-        String simLabel = "TCE_CONT_28days";
+        String simLabel = "TCE_CONT_28D_1.0";
         java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_SS");
         java.util.Date now = new java.util.Date();
         String date_time = dateFormat.format(now);
@@ -537,89 +537,163 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
         }
 
         if (type == activeTcell) {
+
+            // =========================
+            // TCE decay / activation tracking
+            // =========================
             if (G.TCE_ON) {
                 this.hours_since_activation = 0;
             } else {
                 this.hours_since_activation += 1;
             }
-            // Increment T cell age and hours since last kill every hour
+
+            // =========================
+            // Update clocks
+            // =========================
             this.tcellAge += 1;
             this.hours_since_kill += 1;
             this.hours_since_division += 1;
 
+            // =========================
+            // Up to 3 movement / interaction attempts
+            // =========================
             for (int run = 0; run < 3; run++) {
-                int[] movdivHood = MooreHood(true); // For division and movement
-                int options = MapOccupiedHood(movdivHood); // Mapping occupied spots
-                int emptyNeighbors = MapEmptyHood(movdivHood); // Mapping empty spots
+
+                int[] movdivHood = MooreHood(true);
+
+                int options = MapOccupiedHood(movdivHood);
+                int emptyNeighbors = MapEmptyHood(movdivHood);
 
                 boolean hasKilled = false;
-                for (int j = 0; j < options; j++) {
-                    agentLattice target = G.GetAgent(movdivHood[j]); // Store reference
 
-                    if (target != null && target.type == Tumor && this.hours_since_kill >= 12) {
+                // =========================
+                // Scan neighboring cells
+                // =========================
+                for (int j = 0; j < options; j++) {
+
+                    agentLattice target = G.GetAgent(movdivHood[j]);
+
+                    if (target != null &&
+                            target.type == Tumor &&
+                            this.hours_since_kill >= 12) {
+
+                        // =========================
+                        // PD-1 dependent suppression
+                        // =========================
+
+                        // sigmoid:
+                        // low PD-1 -> low suppression
+                        // high PD-1 -> high suppression
+
+                        double suppressionProb =
+                                1.0 / (1.0 + Math.exp(-0.8 * (this.pd_1 - 10.0)));
+
+                        double killSuccessProb = 1.0 - suppressionProb;
+
                         boolean canKill = false;
 
-                        // 3% chance to kill tumor cells
-                        if (G.rn.Double() < 0.03) {
+                        if (G.rn.Double() < killSuccessProb) {
                             canKill = true;
                         }
 
+                        // =========================
+                        // Successful kill
+                        // =========================
                         if (canKill) {
+
                             target.Tcell_Kill();
+
+                            hasKilled = true;
+
                             this.tcellKills += 1;
+
                             this.hours_since_kill = 0;
 
-                            double EXH_INCREMENT_BASE = 0.5;
+                            // =========================
+                            // PD-1 accumulation
+                            // =========================
+
+                            double EXH_INCREMENT_BASE = 1.0;
                             double EXH_TCE_FACTOR = 2.0;
 
                             if (G.TCE_ON) {
-                                this.pd_1 += EXH_INCREMENT_BASE * EXH_TCE_FACTOR;
+                                this.pd_1 +=
+                                        EXH_INCREMENT_BASE * EXH_TCE_FACTOR;
                             } else {
                                 this.pd_1 += EXH_INCREMENT_BASE;
                             }
-                            if (emptyNeighbors > 0 && this.hours_since_division >= 5) {//SENSITIVITY ANALYSIS range 5-28h (paper: "Heritable changes in division speed accompany the diversification of single T cell fate")
-                                double divProbScale = 0.01;
+
+                            // =========================
+                            // T-cell proliferation
+                            // =========================
+                            if (emptyNeighbors > 0 &&
+                                    this.hours_since_division >= 5) {
+
+                                double divProbScale = 0.1;
 
                                 if (G.rn.Double() < divProbScale) {
-                                    for (int i = 0; i < emptyNeighbors; i++) {
-                                        int chosenIndex = G.rn.Int(emptyNeighbors); // Randomly choose an empty cell index
-                                        int chosenCell = movdivHood[chosenIndex];
-//                                    Get the chosen empty cell
-                                        if (G.GetAgent(chosenCell) == null) {
-                                            // Check if the chosen cell is still empty
-                                            agentLattice child = G.NewAgentSQ(chosenCell);
-                                            child.type = activeTcell;
-                                            child.SetCellColor();
-                                            child.tcellAge = 0;
-                                            child.pd_1 = this.pd_1;
-                                            child.hours_since_division = 0;
-                                            this.hours_since_division = 0;
-                                            break;
-                                        }
+
+                                    int chosenIndex =
+                                            G.rn.Int(emptyNeighbors);
+
+                                    int chosenCell =
+                                            movdivHood[chosenIndex];
+
+                                    if (G.GetAgent(chosenCell) == null) {
+
+                                        agentLattice child =
+                                                G.NewAgentSQ(chosenCell);
+
+                                        child.type = activeTcell;
+
+                                        child.SetCellColor();
+
+                                        child.tcellAge = 0;
+
+                                        child.pd_1 = this.pd_1;
+
+                                        child.hours_since_division = 0;
+
+                                        this.hours_since_division = 0;
                                     }
                                 }
                             }
+
+                            // stop scanning after successful kill
+                            break;
                         }
-                        hasKilled = true;
-                        break; // stop after successful kill
                     }
                 }
-                //if nothing was killed, attmept to move
+
+                // =========================
+                // Movement if no kill occurred
+                // =========================
                 if (!hasKilled && emptyNeighbors > 0) {
-                    int chosenIndex = G.rn.Int(emptyNeighbors); // Randomly choose an empty cell index
-                    int chosenCell = movdivHood[chosenIndex]; // Get the chosen empty cell
-                    if (G.GetAgent(chosenCell) == null) { // Check if the chosen cell is still empty
+
+                    int chosenIndex = G.rn.Int(emptyNeighbors);
+
+                    int chosenCell = movdivHood[chosenIndex];
+
+                    if (G.GetAgent(chosenCell) == null) {
+
                         MoveSQ(chosenCell);
                     }
                 }
-                // Probabilistic exhaustion transition based on PD-1
-                double exhaustionProb = 1.0 / (1.0 + Math.exp(-1.8 * (this.pd_1 - 11.0))); // midpoint = 13.0, slope = 1.5
+
+                // =========================
+                // Exhaustion transition
+                // =========================
+                double exhaustionProb =
+                        1.0 / (1.0 + Math.exp(-1.8 * (this.pd_1 - 13.0)));
+
                 if (G.rn.Double() < exhaustionProb) {
+
                     this.type = exhaustedTcells;
+
                     this.SetCellColor();
+
                     break;
                 }
-
             }
         }
 
