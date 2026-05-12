@@ -28,17 +28,18 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     public double cached_CD8_TIL_count = 0;
     public int totalTumorCells = 0; // tracks all tumor cells
     public int tumorKillsToday = 0;
+    public int activeTcellDivisions = 0;
 
     // Tumor dynamics (per hour probabilities)
-    final static double Tumor_PROLIFERATION_PROB = 0.0; //1.0 / 24.0;  // ≈ one division per day (literature-informed; sensitivity range tested)
-    final static double Tumor_DEATH_PROB = 0.0; //1.0 / 132.0;         // low baseline apoptosis rate
+    final static double Tumor_PROLIFERATION_PROB = 0.0; //1.0 / 24.0;
+    final static double Tumor_DEATH_PROB = 0.0; //1.0 / 132.0;
 
     // Exhausted T cell death rate (per hour)
     // Calibrated to yield ~40% cumulative death over 10 days (240 h),
     // assuming exponential decay: survival = exp(-r * t) → r ≈ 0.00213 h⁻¹
     // Based on in vitro CD8⁺ T cell survival kinetics:
     // Hedfors & Brinchmann, Scand J Immunol (2003)
-    public double T_CELL_DEATH_RATE = 0.00213;
+    public double T_CELL_DEATH_RATE = 1.0 / 96.0; //0.00213;
 
     boolean TCE_ON; // indicates whether TCE therapy is currently active
 
@@ -298,7 +299,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     ////////
     public static void main (String[]args) throws IOException {
         //TIME STAMP
-        String simLabel = "TCE_CONT_28D_1.0";
+        String simLabel = "TCE_TFI_28D";
         java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_SS");
         java.util.Date now = new java.util.Date();
         String date_time = dateFormat.format(now);
@@ -373,6 +374,11 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     System.out.println("Day " + (int) day);
                     g.RecordOut(g.output, (int) day, cell_count, g.TCE_ON);
 
+                    System.out.println("Active T cell divisions today: "
+                            + g.activeTcellDivisions);
+
+                    g.activeTcellDivisions = 0;
+
                     String pngPath = frameDir + String.format("day_%02d.png", (int) day);
                     g.savePNG(pngPath, 4);
 
@@ -381,6 +387,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     } else {
                         System.out.println("TCE_ON = false");
                     }
+
 
                     day += 1;
                 }
@@ -655,6 +662,8 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                                         child.hours_since_division = 0;
 
                                         this.hours_since_division = 0;
+
+                                        G.activeTcellDivisions++;
                                     }
                                 }
                             }
@@ -684,7 +693,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                 // Exhaustion transition
                 // =========================
                 double exhaustionProb =
-                        1.0 / (1.0 + Math.exp(-1.8 * (this.pd_1 - 13.0)));
+                        1.0 / (1.0 + Math.exp(-0.7 * (this.pd_1 - 14.0)));
 
                 if (G.rn.Double() < exhaustionProb) {
 
