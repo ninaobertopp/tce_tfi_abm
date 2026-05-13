@@ -17,8 +17,8 @@ import javax.imageio.ImageIO;
 //////////////
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
-    public static final double STEPS = (28 * 24.0);
-    public static boolean VISUALS = false; // turns visual output on/off
+    public static final double STEPS = (42 * 24.0);
+    public static boolean VISUALS = true; // turns visual output on/off
 
     public static final int activeTcell = 1;      // active CD8 T cells
     public static final int exhaustedTcells = 4;  // exhausted CD8 T cells
@@ -27,8 +27,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
     public double cached_CD8_TIL_count = 0;
     public int totalTumorCells = 0; // tracks all tumor cells
-
-    public boolean tumorKillToday = false;
+    public int tumorKillsThisHour = 0;
+    public int daysSinceTumorKill = 4;
 
     // Tumor dynamics (per hour probabilities)
     final static double Tumor_PROLIFERATION_PROB = 0.0; //1.0 / 24.0;
@@ -39,7 +39,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     // assuming exponential decay: survival = exp(-r * t) → r ≈ 0.00213 h⁻¹
     // Based on in vitro CD8⁺ T cell survival kinetics:
     // Hedfors & Brinchmann, Scand J Immunol (2003)
-    public double T_CELL_DEATH_RATE = 1.0 / 96.0; //0.00213;
+    public double T_CELL_DEATH_RATE = 1.0 / 72.0; //0.00213;
 
     boolean TCE_ON; // indicates whether TCE therapy is currently active
 
@@ -48,8 +48,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // The matching entry in TCE_Duration defines how long TCE remains on.
 //
 // Example shown: TFI_7 schedule (7 days on, 7 days off, repeated)
-    double[] TCE_start = {1};      // TCE on during Days 1–7 and 15–21
-    double[] TCE_Duration = {28};    // each treatment period lasts 7 days
+    double[] TCE_start = {1, 15};      // TCE on during Days 1–7 and 15–21
+    double[] TCE_Duration = {7, 7};    // each treatment period lasts 7 days
 
     /* Alternative schedules:
 
@@ -296,11 +296,11 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     ////////
     public static void main (String[]args) throws IOException {
         //TIME STAMP
-        String simLabel = "TCE_CONT_28D_actprob_0.0005";
+        String simLabel = "TCE_TFI_28D";
         java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_SS");
         java.util.Date now = new java.util.Date();
         String date_time = dateFormat.format(now);
-        int N_RUNS = 50; // number of stochastic replicates
+        int N_RUNS = 10; // number of stochastic replicates
 
         double totalTime = 0;
         double minTime = Double.MAX_VALUE;
@@ -372,10 +372,10 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     g.RecordOut(g.output, (int) day, cell_count, g.TCE_ON);
 
                     System.out.println(
-                            "tumorKillToday = " + g.tumorKillToday
+                            "daysSinceTumorKill = " + g.daysSinceTumorKill
                     );
 
-                    g.tumorKillToday = false;
+                    g.daysSinceTumorKill++;
 
                     String pngPath = frameDir + String.format("day_%02d.png", (int) day);
                     g.savePNG(pngPath, 4);
@@ -459,7 +459,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                 G.totalTumorCells--;
             }
         }
-        G.tumorKillToday = true;
+        G.daysSinceTumorKill = 0;
         this.Dispose();
     }
 
@@ -477,7 +477,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
 
             double inactiveDivProb = 0.0;
 
-            if (G.tumorKillToday) {
+            if (G.daysSinceTumorKill <= 3) {
                 inactiveDivProb = 1.0 / 120.0;
             }
 
