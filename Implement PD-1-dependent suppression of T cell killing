@@ -18,7 +18,7 @@ import javax.imageio.ImageIO;
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
     public static final double STEPS = (28 * 24.0);
-    public static boolean VISUALS = true; // turns visual output on/off
+    public static boolean VISUALS = false; // turns visual output on/off
 
     public static final int activeTcell = 1;      // active CD8 T cells
     public static final int exhaustedTcells = 4;  // exhausted CD8 T cells
@@ -27,8 +27,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
     public double cached_CD8_TIL_count = 0;
     public int totalTumorCells = 0; // tracks all tumor cells
-    public int tumorKillsToday = 0;
-    public int activeTcellDivisions = 0;
+    public int tumorKillsThisHour = 0;
+    public int daysSinceTumorKill = 4;
 
     // Tumor dynamics (per hour probabilities)
     final static double Tumor_PROLIFERATION_PROB = 0.0; //1.0 / 24.0;
@@ -289,9 +289,6 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                 }
             }
         }
-
-        double[] cellCounts = CellCounts();
-        tumorKillsToday = 0;
     }
 
     ////////
@@ -299,7 +296,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     ////////
     public static void main (String[]args) throws IOException {
         //TIME STAMP
-        String simLabel = "TCE_TFI_28D";
+        String simLabel = "TCE_CONT_28D_actprob_0.0005";
         java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_SS");
         java.util.Date now = new java.util.Date();
         String date_time = dateFormat.format(now);
@@ -374,10 +371,11 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     System.out.println("Day " + (int) day);
                     g.RecordOut(g.output, (int) day, cell_count, g.TCE_ON);
 
-                    System.out.println("Active T cell divisions today: "
-                            + g.activeTcellDivisions);
+                    System.out.println(
+                            "daysSinceTumorKill = " + g.daysSinceTumorKill
+                    );
 
-                    g.activeTcellDivisions = 0;
+                    g.daysSinceTumorKill++;
 
                     String pngPath = frameDir + String.format("day_%02d.png", (int) day);
                     g.savePNG(pngPath, 4);
@@ -423,7 +421,6 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
     public int type; // type of cell
     int color; // color of each cell for visualization
     double pd_1 = 0; // pd_1 for tcells
-    double tcellKills = 0; // Track T cell kills per step
     double tcellAge = 0; // used for tracking the age of a tcell
     double hours_since_kill = 0; // hours since a tcell last killed a tumor cell
     public double hours_since_activation = 0;
@@ -462,7 +459,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                 G.totalTumorCells--;
             }
         }
-        G.tumorKillsToday++;
+        G.daysSinceTumorKill = 0;
         this.Dispose();
     }
 
@@ -478,7 +475,11 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                 return;
             }
 
-            double inactiveDivProb = 1.0 / 120.0;
+            double inactiveDivProb = 0.0;
+
+            if (G.daysSinceTumorKill <= 3) {
+                inactiveDivProb = 1.0 / 120.0;
+            }
 
             if (G.rn.Double() < inactiveDivProb) {
                 int[] divHood = MooreHood(true);
@@ -593,7 +594,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                         // high PD-1 -> high suppression
 
                         double suppressionProb =
-                                1.0 / (1.0 + Math.exp(-0.8 * (this.pd_1 - 10.0)));
+                                1.0 / (1.0 + Math.exp(-0.7 * (this.pd_1 - 10.0)));
 
                         double killSuccessProb = 1.0 - suppressionProb;
 
@@ -611,8 +612,6 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                             target.Tcell_Kill();
 
                             hasKilled = true;
-
-                            this.tcellKills += 1;
 
                             this.hours_since_kill = 0;
 
@@ -663,7 +662,6 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
 
                                         this.hours_since_division = 0;
 
-                                        G.activeTcellDivisions++;
                                     }
                                 }
                             }
