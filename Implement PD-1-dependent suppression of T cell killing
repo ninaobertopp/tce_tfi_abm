@@ -27,8 +27,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
     public double cached_CD8_TIL_count = 0;
     public int totalTumorCells = 0; // tracks all tumor cells
-    public int tumorKillsThisHour = 0;
-    public int daysSinceTumorKill = 4;
+
+    public boolean tumorKillToday = false;
 
     // Tumor dynamics (per hour probabilities)
     final static double Tumor_PROLIFERATION_PROB = 0.0; //1.0 / 24.0;
@@ -372,10 +372,10 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     g.RecordOut(g.output, (int) day, cell_count, g.TCE_ON);
 
                     System.out.println(
-                            "daysSinceTumorKill = " + g.daysSinceTumorKill
+                            "tumorKillToday = " + g.tumorKillToday
                     );
 
-                    g.daysSinceTumorKill++;
+                    g.tumorKillToday = false;
 
                     String pngPath = frameDir + String.format("day_%02d.png", (int) day);
                     g.savePNG(pngPath, 4);
@@ -459,7 +459,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                 G.totalTumorCells--;
             }
         }
-        G.daysSinceTumorKill = 0;
+        G.tumorKillToday = true;
         this.Dispose();
     }
 
@@ -477,7 +477,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
 
             double inactiveDivProb = 0.0;
 
-            if (G.daysSinceTumorKill <= 3) {
+            if (G.tumorKillToday) {
                 inactiveDivProb = 1.0 / 120.0;
             }
 
