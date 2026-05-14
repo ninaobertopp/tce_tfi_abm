@@ -10,6 +10,7 @@ import static TCE_TFI.gridLattice.*;
 import static HAL.Util.*;
 import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
+import java.util.ArrayList;
 
 
 //////////////
@@ -17,8 +18,8 @@ import javax.imageio.ImageIO;
 //////////////
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
-    public static final double STEPS = (42 * 24.0);
-    public static boolean VISUALS = true; // turns visual output on/off
+    public static final double STEPS = (14 * 24.0);
+    public static boolean VISUALS = false; // turns visual output on/off
 
     public static final int activeTcell = 1;      // active CD8 T cells
     public static final int exhaustedTcells = 4;  // exhausted CD8 T cells
@@ -173,6 +174,41 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
         return counts;
     }
+
+    public ArrayList<TcellState> HarvestTcells() {
+
+        ArrayList<TcellState> harvested = new ArrayList<>();
+
+        for (agentLattice c : this) {
+
+            if (
+                    c.type == activeTcell ||
+                            c.type == exhaustedTcells ||
+                            c.type == inactiveTcell
+            ) {
+
+                TcellState state = new TcellState(
+
+                        c.type,
+
+                        c.pd_1,
+
+                        c.tcellAge,
+
+                        c.hours_since_activation,
+
+                        c.hours_since_division,
+
+                        c.hours_since_kill
+                );
+
+                harvested.add(state);
+            }
+        }
+
+        return harvested;
+    }
+
     public void ResetTumorsToETRatio(double targetRatio) {
         // targetRatio = tumor cells per T cell, e.g. 4.0 for E:T = 1:4
 
@@ -296,7 +332,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     ////////
     public static void main (String[]args) throws IOException {
         //TIME STAMP
-        String simLabel = "TCE_TFI_28D";
+        String simLabel = "TCE_TFI";
         java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_SS");
         java.util.Date now = new java.util.Date();
         String date_time = dateFormat.format(now);
@@ -360,6 +396,17 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                 g.ModelStep(timeStep, day);
 
+                if ((int)day == 14 && i % 24 == 0) {
+
+                    ArrayList<TcellState> transferredCells =
+                            g.HarvestTcells();
+
+                    System.out.println(
+                            "Harvested T cells = " +
+                                    transferredCells.size()
+                    );
+                }
+
 // GRAPHICAL OUTPUT
                 if (VISUALS) {
                     g.Draw(Cell_vis);
@@ -411,6 +458,47 @@ class gridLattice extends AgentGrid2D<agentLattice> {
         System.out.printf("Range: %.2f – %.2f seconds%n", minTime, maxTime);
         System.out.printf("Total time: %.2f seconds (%.2f minutes)%n",
                 totalTime, totalTime / 60.0);
+    }
+}
+
+//////////////
+// T CELL STATE CLASS
+//////////////
+
+class TcellState {
+
+    int type;
+
+    double pd_1;
+
+    double tcellAge;
+
+    double hours_since_activation;
+
+    double hours_since_division;
+
+    double hours_since_kill;
+
+    public TcellState(
+            int type,
+            double pd_1,
+            double tcellAge,
+            double hours_since_activation,
+            double hours_since_division,
+            double hours_since_kill
+    ) {
+
+        this.type = type;
+
+        this.pd_1 = pd_1;
+
+        this.tcellAge = tcellAge;
+
+        this.hours_since_activation = hours_since_activation;
+
+        this.hours_since_division = hours_since_division;
+
+        this.hours_since_kill = hours_since_kill;
     }
 }
 
