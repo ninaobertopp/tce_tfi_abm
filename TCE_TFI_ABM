@@ -19,7 +19,7 @@ import java.util.ArrayList;
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
     public static final double STEPS = (20 * 24.0);
-    public static boolean VISUALS = true; // turns visual output on/off
+    public static boolean VISUALS = false; // turns visual output on/off
 
     public static final int activeTcell = 1;      // active CD8 T cells
     public static final int exhaustedTcells = 4;  // exhausted CD8 T cells
@@ -312,8 +312,11 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
     public void InjectTransferredTcells(
             ArrayList<TcellState> transferredCells,
-            int numToTransfer
-    ) {
+            int numToTransfer,
+            FileIO ACTcellOutput
+    )
+
+    {
 
         int transferred = 0;
 
@@ -330,6 +333,28 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                 TcellState state =
                         transferredCells.remove(randomIndex);
+
+                String phenotype = "";
+
+                if (state.type == activeTcell) {
+                    phenotype = "ACTIVE";
+                }
+                else if (state.type == exhaustedTcells) {
+                    phenotype = "EXHAUSTED";
+                }
+                else if (state.type == inactiveTcell) {
+                    phenotype = "INACTIVE";
+                }
+
+                ACTcellOutput.Write(
+                        transferred + "," +
+                                phenotype + "," +
+                                state.pd_1 + "," +
+                                state.tcellAge + "," +
+                                state.hours_since_activation + "," +
+                                state.hours_since_division + "," +
+                                state.hours_since_kill + "\n"
+                );
 
                 agentLattice cell = NewAgentSQ(x, y);
 
@@ -513,12 +538,37 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     );
 
                     /////////////////////////////////////////////////////////
+                    // WRITE TRANSFERRED T CELL PHENOTYPES
+                    // ///////////////////////////////////////////////////////
+
+                    String ACTCellFile =
+                            setting_dir +
+                                    "ACTcells_" +
+                                    date_time +
+                                    "_Day" +
+                                    (int)day +
+                                    "_rep" + run + ".csv";
+
+                    FileIO ACTcellOutput =
+                            new FileIO(ACTCellFile, "w");
+
+                    ACTcellOutput.Write(
+                            "CellID,Type,PD1,TcellAge," +
+                                    "HoursSinceActivation," +
+                                    "HoursSinceDivision," +
+                                    "HoursSinceKill\n"
+                    );
+                    /////////////////////////////////////////////////////////
                     // CREATE NEW TRANSFER GRID
                     /////////////////////////////////////////////////////////
 
                     String newOutputFile =
                             setting_dir +
-                                    "TRANSFER_rep" + run + ".csv";
+                                    "ACT_" +
+                                    date_time +
+                                    "_Day" +
+                                    (int)day +
+                                    "_rep" + run + ".csv";
 
                     gridLattice transferGrid =
                             new gridLattice(
@@ -532,13 +582,17 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     // SEED FRESH TUMORS
                     /////////////////////////////////////////////////////////
 
-                    transferGrid.SeedFreshTumors(6000);
+                    transferGrid.SeedFreshTumors(4000);
 
 
                     transferGrid.InjectTransferredTcells(
                             transferredCells,
-                            300
+                            200,
+                            ACTcellOutput
                     );
+
+                    ACTcellOutput.Close();
+
 
                     System.out.println(
                             "Fresh tumors seeded into transfer grid"
@@ -626,8 +680,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                     g.daysSinceTumorKill++;
 
-                    String pngPath = frameDir + String.format("day_%02d.png", (int) day);
-                    g.savePNG(pngPath, 4);
+//                    String pngPath = frameDir + String.format("day_%02d.png", (int) day);
+//                    g.savePNG(pngPath, 4);
 
                     if (g.TCE_ON) {
                         System.out.println("TCE_ON = true");
