@@ -502,7 +502,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                 g.ModelStep(timeStep, day);
 
-                if ((int)day == 14 && i % 24 == 0) {
+                if ((int)day == 15 && i % 24 == 0) {
 
                     ArrayList<TcellState> transferredCells =
                             g.HarvestTcells();
@@ -548,7 +548,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // RUN TRANSFER SIMULATION
 /////////////////////////////////////////////////////////
 
-                    double transferDay = 1;
+                    double ACT_Day = 1;
 
                     for (int t = 0; t < 21 * 24; t++) {
 
@@ -557,35 +557,48 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                         double[] transferCounts =
                                 transferGrid.CellCounts();
 
-                        transferGrid.ModelStep(t, transferDay);
+//                        if (VISUALS) {
+//
+//                            transferGrid.Draw(Cell_vis);
+//
+//                            dayLabel.SetText(
+//                                    "ACT Day: " + (int)ACT_Day
+//                            );
+//
+//                            win.TickPause(100);
+//                        }
 
                         if (VISUALS) {
 
                             transferGrid.Draw(Cell_vis);
 
-                            dayLabel.SetText(
-                                    "ACT Day: " + (int)transferDay
-                            );
+                            if (t % 24 == 0) {
+
+                                dayLabel.SetText(
+                                        "ACT Day: " + (int)ACT_Day
+                                );
+                            }
 
                             win.TickPause(100);
                         }
 
+                        transferGrid.ModelStep(t, ACT_Day);
 
                         if (t % 24 == 0) {
 
                             System.out.println(
-                                    "TRANSFER Day " +
-                                            (int)transferDay
+                                    "ACT Day " +
+                                            (int)ACT_Day
                             );
 
                             transferGrid.RecordOut(
                                     transferGrid.output,
-                                    (int)transferDay,
+                                    (int)ACT_Day,
                                     transferCounts,
                                     false
                             );
 
-                            transferDay++;
+                            ACT_Day++;
                         }
                     }
 
