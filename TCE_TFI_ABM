@@ -18,8 +18,8 @@ import java.util.ArrayList;
 //////////////
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
-    public static final double STEPS = (14 * 24.0);
-    public static boolean VISUALS = false; // turns visual output on/off
+    public static final double STEPS = (20 * 24.0);
+    public static boolean VISUALS = true; // turns visual output on/off
 
     public static final int activeTcell = 1;      // active CD8 T cells
     public static final int exhaustedTcells = 4;  // exhausted CD8 T cells
@@ -44,13 +44,15 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
     boolean TCE_ON; // indicates whether TCE therapy is currently active
 
+    boolean ACT_PHASE = false;
+
     // TCE dosing schedule defined by start days and duration (in days)
 // Each entry in TCE_start corresponds to one treatment-on period.
 // The matching entry in TCE_Duration defines how long TCE remains on.
 //
 // Example shown: TFI_7 schedule (7 days on, 7 days off, repeated)
-    double[] TCE_start = {1, 15};      // TCE on during Days 1–7 and 15–21
-    double[] TCE_Duration = {7, 7};    // each treatment period lasts 7 days
+    double[] TCE_start = {1};      // TCE on during Days 1–7 and 15–21
+    double[] TCE_Duration = {28};    // each treatment period lasts 7 days
 
     /* Alternative schedules:
 
@@ -126,6 +128,32 @@ class gridLattice extends AgentGrid2D<agentLattice> {
             c.type = inactiveTcell;
             c.SetCellColor();
         }
+    }
+
+    /////////////////////////////////////////////////////////
+// NEW EMPTY GRID CONSTRUCTOR
+/////////////////////////////////////////////////////////
+
+    public gridLattice(
+            int xDim,
+            int yDim,
+            String outFileName,
+            Rand rng
+    ) {
+
+        super(xDim, yDim, agentLattice.class, true, true);
+
+        this.rn = rng;
+
+        this.ACT_PHASE = true;
+
+        output = new FileIO(outFileName, "w");
+
+        output.Write("Day,Total_CD8_TILs,Total_Tumor,");
+        output.Write("Active_CD8_Tcells,");
+        output.Write("Exhausted_CD8_Tcells,");
+        output.Write("Inactive_CD8_Tcells,");
+        output.Write("%_Exhausted_CD8_Tcells,TCE_ON\n");
     }
 
     ////////////////
@@ -212,6 +240,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     public void ResetTumorsToETRatio(double targetRatio) {
         // targetRatio = tumor cells per T cell, e.g. 4.0 for E:T = 1:4
 
+
+
         int tCellCount = 0;
 
         for (agentLattice c : this) {
@@ -254,6 +284,80 @@ class gridLattice extends AgentGrid2D<agentLattice> {
         writeHere.Write((tceOnFlag ? "true" : "false") + "\n");
     }
 
+    // in vivo tumor cells
+
+    public void SeedFreshTumors(int numTumors) {
+
+        for (int i = 0; i < numTumors; i++) {
+
+            int x, y;
+
+            do {
+
+                x = rn.Int(xDim);
+
+                y = rn.Int(yDim);
+
+            } while (GetAgent(x, y) != null);
+
+            agentLattice tumor = NewAgentSQ(x, y);
+
+            tumor.type = Tumor;
+
+            tumor.SetCellColor();
+        }
+
+        totalTumorCells = numTumors;
+    }
+
+    public void InjectTransferredTcells(
+            ArrayList<TcellState> transferredCells,
+            int numToTransfer
+    ) {
+
+        int transferred = 0;
+
+        while (transferred < numToTransfer &&
+                transferredCells.size() > 0) {
+
+            int x = rn.Int(xDim);
+            int y = rn.Int(yDim);
+
+            if (GetAgent(x, y) == null) {
+
+                int randomIndex =
+                        rn.Int(transferredCells.size());
+
+                TcellState state =
+                        transferredCells.remove(randomIndex);
+
+                agentLattice cell = NewAgentSQ(x, y);
+
+                cell.type = state.type;
+
+                cell.pd_1 = state.pd_1;
+
+                cell.tcellAge = state.tcellAge;
+
+                cell.hours_since_activation =
+                        state.hours_since_activation;
+
+                cell.hours_since_division =
+                        state.hours_since_division;
+
+                cell.hours_since_kill =
+                        state.hours_since_kill;
+
+                cell.SetCellColor();
+
+                transferred++;
+            }
+        }
+
+        System.out.println(
+                "Transferred T cells = " + transferred
+        );
+    }
     // Save a PNG of the current grid state at logical resolution x scale
     public void savePNG(String filePath, int scale) {
         int w = xDim * scale, h = yDim * scale;
@@ -304,7 +408,9 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
 
             // Reset tumor cells every 7 days (Day 7, 14, 21, 28, 35, ...)
-            if (timeStep % (7 * 24) == 0) {
+            if (!ACT_PHASE &&
+                    timeStep % (7 * 24) == 0) {
+
                 ResetTumorsToETRatio(4.0);
             }
 
@@ -405,7 +511,90 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                             "Harvested T cells = " +
                                     transferredCells.size()
                     );
+
+                    /////////////////////////////////////////////////////////
+                    // CREATE NEW TRANSFER GRID
+                    /////////////////////////////////////////////////////////
+
+                    String newOutputFile =
+                            setting_dir +
+                                    "TRANSFER_rep" + run + ".csv";
+
+                    gridLattice transferGrid =
+                            new gridLattice(
+                                    xDim,
+                                    yDim,
+                                    newOutputFile,
+                                    runRNG
+                            );
+
+                    /////////////////////////////////////////////////////////
+                    // SEED FRESH TUMORS
+                    /////////////////////////////////////////////////////////
+
+                    transferGrid.SeedFreshTumors(6000);
+
+
+                    transferGrid.InjectTransferredTcells(
+                            transferredCells,
+                            300
+                    );
+
+                    System.out.println(
+                            "Fresh tumors seeded into transfer grid"
+                    );
+
+                    /////////////////////////////////////////////////////////
+// RUN TRANSFER SIMULATION
+/////////////////////////////////////////////////////////
+
+                    double transferDay = 1;
+
+                    for (int t = 0; t < 21 * 24; t++) {
+
+                        transferGrid.TCE_ON = false;
+
+                        double[] transferCounts =
+                                transferGrid.CellCounts();
+
+                        transferGrid.ModelStep(t, transferDay);
+
+                        if (VISUALS) {
+
+                            transferGrid.Draw(Cell_vis);
+
+                            dayLabel.SetText(
+                                    "ACT Day: " + (int)transferDay
+                            );
+
+                            win.TickPause(100);
+                        }
+
+
+                        if (t % 24 == 0) {
+
+                            System.out.println(
+                                    "TRANSFER Day " +
+                                            (int)transferDay
+                            );
+
+                            transferGrid.RecordOut(
+                                    transferGrid.output,
+                                    (int)transferDay,
+                                    transferCounts,
+                                    false
+                            );
+
+                            transferDay++;
+                        }
+                    }
+
+                    transferGrid.output.Close();
+
+                    break;
+
                 }
+
 
 // GRAPHICAL OUTPUT
                 if (VISUALS) {
