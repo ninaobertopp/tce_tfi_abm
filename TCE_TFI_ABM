@@ -18,7 +18,7 @@ import java.util.ArrayList;
 //////////////
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
-    public static final double STEPS = (20 * 24.0);
+    public static final double STEPS = (29 * 24.0);
     public static boolean VISUALS = true; // turns visual output on/off
 
     public static final int activeTcell = 1;      // active CD8 T cells
@@ -47,8 +47,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // The matching entry in TCE_Duration defines how long TCE remains on.
 //
 // Example shown: TFI_7 schedule (7 days on, 7 days off, repeated)
-    double[] TCE_start = {1};      // TCE on during Days 1–7 and 15–21
-    double[] TCE_Duration = {28};    // each treatment period lasts 7 days
+    double[] TCE_start = {1, 15};      // TCE on during Days 1–7 and 15–21
+    double[] TCE_Duration = {7, 7};    // each treatment period lasts 7 days
 
     /* Alternative schedules:
 
@@ -578,7 +578,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     // SEED FRESH TUMORS
                     /////////////////////////////////////////////////////////
 
-                    transferGrid.SeedFreshTumors(4000);
+                    transferGrid.SeedFreshTumors(200);
 
 
                     transferGrid.InjectTransferredTcells(
@@ -602,7 +602,10 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                     for (int t = 0; t < 21 * 24; t++) {
 
-                        transferGrid.TCE_ON = false;
+                        // TCE treatment during ACT phase:
+                       // ON on ACT Day 2 and ACT Day 9 only
+                        transferGrid.TCE_ON =
+                                ((int)ACT_Day == 2 || (int)ACT_Day == 9);
 
                         double[] transferCounts =
                                 transferGrid.CellCounts();
@@ -1055,7 +1058,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
             if (G.ACT_PHASE) {
 
                 // in vivo ACT tumors proliferate
-                adjusted_prolif_prob = 1.0 / 48.0;
+                adjusted_prolif_prob = 1.0 / 72.0;
 
             } else {
 
