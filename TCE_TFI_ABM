@@ -18,7 +18,7 @@ import java.util.ArrayList;
 //////////////
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
-    public static final double STEPS = (29 * 24.0);
+    public static final double STEPS = (23 * 24.0);
     public static boolean VISUALS = true; // turns visual output on/off
 
     public static final int activeTcell = 1;      // active CD8 T cells
@@ -47,8 +47,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // The matching entry in TCE_Duration defines how long TCE remains on.
 //
 // Example shown: TFI_7 schedule (7 days on, 7 days off, repeated)
-    double[] TCE_start = {1};      // TCE on during Days 1–7 and 15–21
-    double[] TCE_Duration = {28};    // each treatment period lasts 7 days
+    double[] TCE_start = {1, 15};      // TCE on during Days 1–7 and 15–21
+    double[] TCE_Duration = {7, 7};    // each treatment period lasts 7 days
 
     /* Alternative schedules:
 
@@ -457,11 +457,11 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     ////////
     public static void main(String[] args) throws IOException {
         //TIME STAMP
-        String simLabel = "TCE_CONT";
+        String simLabel = "TCE_TFI";
         java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_SS");
         java.util.Date now = new java.util.Date();
         String date_time = dateFormat.format(now);
-        int N_RUNS = 5; // number of stochastic replicates
+        int N_RUNS = 50; // number of stochastic replicates
 
         double totalTime = 0;
         double minTime = Double.MAX_VALUE;
@@ -583,7 +583,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     // SEED FRESH TUMORS
                     /////////////////////////////////////////////////////////
 
-                    transferGrid.SeedFreshTumors(200);
+                    transferGrid.SeedFreshTumors(4000);
 
                     transferGrid.InjectTransferredTcells(
                             transferredCells,
@@ -597,29 +597,68 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                             "Fresh tumors seeded into transfer grid"
                     );
 
-                    /////////////////////////////////////////////////////////
-                    // RUN TRANSFER SIMULATION
-                    /////////////////////////////////////////////////////////
-
-                    double ACT_Day = 1;
+/////////////////////////////////////////////////////////
+// RUN TRANSFER SIMULATION
+/////////////////////////////////////////////////////////
 
                     for (int t = 0; t < 21 * 24; t++) {
 
-                        // TCE treatment during ACT phase:
-                        // ON on ACT Day 2 and ACT Day 9 only
+                        /////////////////////////////////////////////////////////
+                        // DEFINE ACT DAY FROM TIMESTEP
+                        /////////////////////////////////////////////////////////
+
+                        int ACT_Day = (t / 24) + 1;
+
+                        /////////////////////////////////////////////////////////
+                        // TCE SCHEDULE DURING ACT PHASE
+                        //
+                        // OFF on ACT Day 1
+                        // ON only during:
+                        // - ACT Day 2
+                        // - ACT Day 9
+                        /////////////////////////////////////////////////////////
+
                         transferGrid.TCE_ON =
-                                ((int) ACT_Day == 2 || (int) ACT_Day == 9);
+                                (ACT_Day == 2 || ACT_Day == 9);
 
-                        double[] transferCounts =
-                                transferGrid.CellCounts();
+                        /////////////////////////////////////////////////////////
+                        // RECORD OUTPUT AT START OF EACH DAY
+                        // BEFORE BIOLOGY IS APPLIED
+                        /////////////////////////////////////////////////////////
 
-                        // UPDATE ACT GUI LABEL BEFORE BIOLOGY
                         if (t % 24 == 0) {
 
+                            double[] transferCounts =
+                                    transferGrid.CellCounts();
+
+                            System.out.println(
+                                    "ACT Day " + ACT_Day
+                            );
+
+                            System.out.println(
+                                    "ACT TCE_ON = " +
+                                            transferGrid.TCE_ON
+                            );
+
+                            transferGrid.RecordOut(
+                                    transferGrid.output,
+                                    ACT_Day,
+                                    transferCounts,
+                                    transferGrid.TCE_ON
+                            );
+
+                            /////////////////////////////////////////////////////////
+                            // UPDATE GUI LABEL
+                            /////////////////////////////////////////////////////////
+
                             dayLabel.SetText(
-                                    "ACT Day: " + (int) ACT_Day
+                                    "ACT Day: " + ACT_Day
                             );
                         }
+
+                        /////////////////////////////////////////////////////////
+                        // VISUALIZATION
+                        /////////////////////////////////////////////////////////
 
                         if (VISUALS) {
 
@@ -628,24 +667,11 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                             win.TickPause(100);
                         }
 
+                        /////////////////////////////////////////////////////////
+                        // APPLY BIOLOGY
+                        /////////////////////////////////////////////////////////
+
                         transferGrid.ModelStep(t, ACT_Day);
-
-                        if (t % 24 == 0) {
-
-                            System.out.println(
-                                    "ACT Day " +
-                                            (int) ACT_Day
-                            );
-
-                            transferGrid.RecordOut(
-                                    transferGrid.output,
-                                    (int) ACT_Day,
-                                    transferCounts,
-                                    false
-                            );
-
-                            ACT_Day++;
-                        }
                     }
 
                     transferGrid.output.Close();
@@ -675,6 +701,15 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
 //    String pngPath = frameDir + String.format("day_%02d.png", (int) day);
 //    g.savePNG(pngPath, 4);
+
+                    if (VISUALS) {
+
+                        String pngPath =
+                                frameDir +
+                                        String.format("day_%02d.png", (int) day);
+
+                        g.savePNG(pngPath, 4);
+                    }
 
                     if (g.TCE_ON) {
                         System.out.println("TCE_ON = true");
@@ -1031,7 +1066,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
             if (G.ACT_PHASE) {
 
                 // in vivo ACT tumors proliferate
-                adjusted_prolif_prob = 1.0 / 72.0;
+                adjusted_prolif_prob = 0.0; //1.0 / 72.0;
 
             } else {
 
