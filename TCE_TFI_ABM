@@ -499,6 +499,9 @@ class gridLattice extends AgentGrid2D<agentLattice> {
             UILabel dayLabel = new UILabel("Day: 1");
             win.AddCol(1, dayLabel);
 
+            UILabel tceLabel = new UILabel("TCE: OFF");
+            win.AddCol(1, tceLabel);
+
             if (VISUALS) {
                 win.RunGui();
             }
@@ -514,6 +517,12 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     if (day >= g.TCE_start[k] && day <= g.TCE_start[k] + g.TCE_Duration[k] - 1) {
                         g.TCE_ON = true;
                     }
+                }
+
+                if (g.TCE_ON) {
+                    tceLabel.SetText("TCE: ON");
+                } else {
+                    tceLabel.SetText("TCE: OFF");
                 }
 
 // COUNT CURRENT POPULATION
@@ -654,6 +663,15 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                             dayLabel.SetText(
                                     "ACT Day: " + ACT_Day
                             );
+
+                            if (transferGrid.TCE_ON) {
+
+                                tceLabel.SetText("TCE: ON");
+
+                            } else {
+
+                                tceLabel.SetText("TCE: OFF");
+                            }
                         }
 
                         /////////////////////////////////////////////////////////
