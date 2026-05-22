@@ -591,7 +591,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     // SEED FRESH TUMORS
                     /////////////////////////////////////////////////////////
 
-                    transferGrid.SeedFreshTumors(200);
+                    transferGrid.SeedFreshTumors(6000);
 
                     transferGrid.InjectTransferredTcells(
                             transferredCells,
@@ -619,45 +619,16 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                         /////////////////////////////////////////////////////////
                         // TCE SCHEDULE DURING ACT PHASE
-                        //
-                        // OFF on ACT Day 1
-                        // ON only during:
-                        // - ACT Day 2
-                        // - ACT Day 9
                         /////////////////////////////////////////////////////////
 
                         transferGrid.TCE_ON =
                                 (ACT_Day == 2 || ACT_Day == 9);
 
                         /////////////////////////////////////////////////////////
-                        // RECORD OUTPUT AT START OF EACH DAY
-                        // BEFORE BIOLOGY IS APPLIED
+                        // UPDATE GUI LABELS AT START OF DAY
                         /////////////////////////////////////////////////////////
 
                         if (t % 24 == 0) {
-
-                            double[] transferCounts =
-                                    transferGrid.CellCounts();
-
-                            System.out.println(
-                                    "ACT Day " + ACT_Day
-                            );
-
-                            System.out.println(
-                                    "ACT TCE_ON = " +
-                                            transferGrid.TCE_ON
-                            );
-
-                            transferGrid.RecordOut(
-                                    transferGrid.output,
-                                    ACT_Day,
-                                    transferCounts,
-                                    transferGrid.TCE_ON
-                            );
-
-                            /////////////////////////////////////////////////////////
-                            // UPDATE GUI LABEL
-                            /////////////////////////////////////////////////////////
 
                             dayLabel.SetText(
                                     "ACT Day: " + ACT_Day
@@ -689,6 +660,43 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                         /////////////////////////////////////////////////////////
 
                         transferGrid.ModelStep(t, ACT_Day);
+
+                        /////////////////////////////////////////////////////////
+                        // END-OF-DAY OUTPUT
+                        // (matches in vitro logic)
+                        /////////////////////////////////////////////////////////
+
+                        if (t % 24 == 23) {
+
+                            double[] transferCounts =
+                                    transferGrid.CellCounts();
+
+                            System.out.println(
+                                    "ACT Day " + ACT_Day
+                            );
+
+                            System.out.println(
+                                    "ACT daysSinceTumorKill = "
+                                            + transferGrid.daysSinceTumorKill
+                            );
+
+                            System.out.println(
+                                    "ACT TCE_ON = " +
+                                            transferGrid.TCE_ON
+                            );
+
+                            transferGrid.RecordOut(
+                                    transferGrid.output,
+                                    ACT_Day,
+                                    transferCounts,
+                                    transferGrid.TCE_ON
+                            );
+
+                            // increment AFTER printing
+                            // so next day reflects elapsed time
+
+                            transferGrid.daysSinceTumorKill++;
+                        }
                     }
 
                     transferGrid.output.Close();
