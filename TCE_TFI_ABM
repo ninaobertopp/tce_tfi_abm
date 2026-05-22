@@ -271,13 +271,56 @@ class gridLattice extends AgentGrid2D<agentLattice> {
         totalTumorCells = targetTumorCells;
     }
 
-    public void RecordOut(FileIO writeHere, int time, double[] cts, boolean tceOnFlag) {
+    public void RecordOut(
+            FileIO writeHere,
+            int time,
+            double[] cts,
+            boolean tceOnFlag
+    ) {
+
         writeHere.Write(time + ",");
+
         for (int i = 0; i < cts.length; i++) {
-            writeHere.Write(String.format("%.2f", cts[i]));
+
+            writeHere.Write(
+                    String.format("%.2f", cts[i])
+            );
+
             writeHere.Write(",");
         }
-        writeHere.Write((tceOnFlag ? "true" : "false") + "\n");
+
+        writeHere.Write(
+                (tceOnFlag ? "true" : "false") + "\n"
+        );
+    }
+
+/////////////////////////////////////////////////////////
+// DAILY STATUS PRINTING
+/////////////////////////////////////////////////////////
+
+    public void PrintDailyStatus(int day) {
+
+        System.out.println(
+                "Day " + day
+        );
+
+        System.out.println(
+                "daysSinceTumorKill = "
+                        + this.daysSinceTumorKill
+        );
+
+        if (this.TCE_ON) {
+
+            System.out.println(
+                    "TCE_ON = true"
+            );
+
+        } else {
+
+            System.out.println(
+                    "TCE_ON = false"
+            );
+        }
     }
 
     // in vivo tumor cells
@@ -535,7 +578,27 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // APPLY BIOLOGY
 
                 g.ModelStep(timeStep, day);
+
                 if ((int) day == 14 && i % 24 == 23) {
+
+                    /////////////////////////////////////////////////////////
+                    // PRINT FINAL IN VITRO DAY 14 STATUS
+                    /////////////////////////////////////////////////////////
+
+                    g.PrintDailyStatus((int) day);
+
+                    g.RecordOut(
+                            g.output,
+                            (int) day,
+                            cell_count,
+                            g.TCE_ON
+                    );
+
+                    g.daysSinceTumorKill++;
+
+                    /////////////////////////////////////////////////////////
+                    // HARVEST T CELLS
+                    /////////////////////////////////////////////////////////
 
                     ArrayList<TcellState> transferredCells =
                             g.HarvestTcells();
@@ -671,19 +734,9 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                             double[] transferCounts =
                                     transferGrid.CellCounts();
 
-                            System.out.println(
-                                    "ACT Day " + ACT_Day
-                            );
+                            System.out.println("ACT Phase");
 
-                            System.out.println(
-                                    "ACT daysSinceTumorKill = "
-                                            + transferGrid.daysSinceTumorKill
-                            );
-
-                            System.out.println(
-                                    "ACT TCE_ON = " +
-                                            transferGrid.TCE_ON
-                            );
+                            transferGrid.PrintDailyStatus(ACT_Day);
 
                             transferGrid.RecordOut(
                                     transferGrid.output,
@@ -714,12 +767,13 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                 if (i % 24.0 == 23) {
 
-                    System.out.println("Day " + (int) day);
+                    g.PrintDailyStatus((int) day);
 
-                    g.RecordOut(g.output, (int) day, cell_count, g.TCE_ON);
-
-                    System.out.println(
-                            "daysSinceTumorKill = " + g.daysSinceTumorKill
+                    g.RecordOut(
+                            g.output,
+                            (int) day,
+                            cell_count,
+                            g.TCE_ON
                     );
 
                     g.daysSinceTumorKill++;
@@ -735,13 +789,6 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                         g.savePNG(pngPath, 4);
                     }
-
-                    if (g.TCE_ON) {
-                        System.out.println("TCE_ON = true");
-                    } else {
-                        System.out.println("TCE_ON = false");
-                    }
-
                     day += 1;
                 }
             }
