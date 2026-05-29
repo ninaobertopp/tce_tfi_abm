@@ -46,8 +46,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // The matching entry in TCE_Duration defines how long TCE remains on.
 //
 // Example shown: TFI_7 schedule (7 days on, 7 days off, repeated)
-    double[] TCE_start = {1};      // TCE on during Days 1–7 and 15–21
-    double[] TCE_Duration = {28};    // each treatment period lasts 7 days
+    double[] TCE_start = {1, 15};      // TCE on during Days 1–7 and 15–21
+    double[] TCE_Duration = {7, 7};    // each treatment period lasts 7 days
 
     /* Alternative schedules:
 
@@ -913,10 +913,10 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                 for (int j = 0; j < neighbors; j++) {
                     agentLattice target = G.GetAgent(killHood[j]);
                     if (target != null && target.type == Tumor) {
-                        // Same sigmoid as active T cells
+                        // Same sigmoid as active T cells — boosted for in vivo lysis sensitivity
                         double suppressionProb =
                                 1.0 / (1.0 + Math.exp(-0.7 * (this.pd_1 - 10.0)));
-                        double killSuccessProb = 1.0 - suppressionProb;
+                        double killSuccessProb = Math.min(1.0, (1.0 - suppressionProb) * 2.0);
 
                         // Alloreactivity is rare — cap maximum kill chance regardless of PD-1
                         double ALLO_MAX = 0.02;
@@ -1064,9 +1064,9 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
 
                         double killSuccessProb = 1.0 - suppressionProb;
 
-//                        if (G.ACT_PHASE) {
-//                            killSuccessProb = Math.min(1.0, killSuccessProb * 2.0);
-//                        }
+                        if (G.ACT_PHASE) {
+                            killSuccessProb = Math.min(1.0, killSuccessProb * 2.0);
+                        }
 
                         boolean canKill = false;
 
@@ -1110,7 +1110,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                                 if (G.ACT_PHASE) {
 
                                     // in vivo / ACT phase
-                                    divProbScale = 0.1;
+                                    divProbScale = 1.0;
 
                                 } else {
 
