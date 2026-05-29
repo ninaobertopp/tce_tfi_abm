@@ -893,9 +893,12 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
 
 
     void CellStep() {
+        // Movement attempts scale with environment:
+        // more attempts in vivo (ACT phase) to reflect circulatory transport
+        int moveAttempts = G.ACT_PHASE ? 6 : 3;
+
         if (type == inactiveTcell) {
             this.tcellAge += 1;
-
             if (G.TCE_ON) {
                 this.type = activeTcell;
                 this.hours_since_activation = 0;
@@ -907,12 +910,9 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
             if (G.ACT_PHASE) {
                 int[] killHood = MooreHood(true);
                 int neighbors = MapOccupiedHood(killHood);
-
                 for (int j = 0; j < neighbors; j++) {
                     agentLattice target = G.GetAgent(killHood[j]);
-
                     if (target != null && target.type == Tumor) {
-
                         // Same sigmoid as active T cells
                         double suppressionProb =
                                 1.0 / (1.0 + Math.exp(-0.7 * (this.pd_1 - 10.0)));
@@ -928,9 +928,9 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                             // PD-1 accumulates on kill, same as active
                             this.pd_1 += 1.0;
 
-                            // Optional: transition to active if they're killing
-                            // this.type = activeTcell;
-                            // this.SetCellColor();
+                            // transition to active if they're killing
+                            this.type = activeTcell;
+                            this.SetCellColor();
                         }
                         break; // one attempt per step regardless of outcome
                     }
@@ -959,8 +959,8 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                     }
                 }
             }
-// Each T cell performs up to 3 movement/interaction attempts per timestep
-            for (int attempt = 0; attempt < 3; attempt++) {
+// Each T cell performs up to x movement/interaction attempts per timestep
+            for (int attempt = 0; attempt < moveAttempts; attempt++) {
                 int[] movdivHood = MooreHood(true); // for division and movement
                 int emptyNeighbors = MapEmptyHood(movdivHood); // mapping empty spots
                 if (emptyNeighbors > 0) {
@@ -984,16 +984,18 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                 return;
             }
 
-            this.SetCellColor();
-            int[] movdivHood = MooreHood(true); // for division and movement
-            int emptyNeighbors = MapEmptyHood(movdivHood); // mapping empty spots
-            if (emptyNeighbors > 0) {
-                int chosenIndex = G.rn.Int(emptyNeighbors); // Randomly choose an empty cell index
-                int chosenCell = movdivHood[chosenIndex]; // Get the chosen empty cell
-                if (G.GetAgent(chosenCell) == null) { // Check if the chosen cell is still empty
-                    MoveSQ(chosenCell);
+            for (int attempt = 0; attempt < moveAttempts; attempt++) {
+                int[] movdivHood = MooreHood(true); // for division and movement
+                int emptyNeighbors = MapEmptyHood(movdivHood); // mapping empty spots
+                if (emptyNeighbors > 0) {
+                    int chosenIndex = G.rn.Int(emptyNeighbors); // Randomly choose an empty cell index
+                    int chosenCell = movdivHood[chosenIndex]; // Get the chosen empty cell
+                    if (G.GetAgent(chosenCell) == null) { // Check if the chosen cell is still empty
+                        MoveSQ(chosenCell);
+                    }
                 }
             }
+
             //Define the percentage of cells to turn into active T cells
             double activationProbability = 0.0005; // low probability of exhausted-to-active reactivation under TCE
             if (G.TCE_ON) {
@@ -1003,6 +1005,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                     this.type = activeTcell;
                     this.SetCellColor(); // Update cell color after type change
                     this.pd_1 = 0.25;
+                    this.SetCellColor();
                 }
             }
         }
@@ -1028,7 +1031,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
             // =========================
             // Up to 3 movement / interaction attempts
             // =========================
-            for (int run = 0; run < 3; run++) {
+            for (int attempt = 0; attempt < moveAttempts; attempt++) {
 
                 int[] movdivHood = MooreHood(true);
 
@@ -1183,6 +1186,20 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
         }
 
         if (type == Tumor) {
+
+//            if (G.ACT_PHASE) {
+//                // ALL blasts are motile in vivo
+//                for (int attempt = 0; attempt < moveAttempts; attempt++) {
+//                    int[] movHood = MooreHood(true);
+//                    int emptyNeighbors = MapEmptyHood(movHood);
+//                    if (emptyNeighbors > 0) {
+//                        int chosenCell = movHood[G.rn.Int(emptyNeighbors)];
+//                        if (G.GetAgent(chosenCell) == null) {
+//                            MoveSQ(chosenCell);
+//                        }
+//                    }
+//                }
+//            }
 
             double adjusted_prolif_prob;
 
