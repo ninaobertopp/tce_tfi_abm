@@ -654,11 +654,12 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     // SEED FRESH TUMORS
                     /////////////////////////////////////////////////////////
 
-                    transferGrid.SeedFreshTumors(4000);
+                    transferGrid.SeedFreshTumors(200);
 
                     transferGrid.InjectTransferredTcells(
                             transferredCells,
-                            200,
+                            //200, //sepcify amount of T cells
+                            transferredCells.size(), // all T cells
                             ACTcellOutput
                     );
 
@@ -733,7 +734,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                         // (matches in vitro logic)
                         /////////////////////////////////////////////////////////
 
-                        if (t % 24 == 23) {
+                        if (t % 24 == 0) {
 
                             double[] transferCounts =
                                     transferGrid.CellCounts();
@@ -902,6 +903,40 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                 return;
             }
 
+            // === Alloreactive killing during ACT phase (PD-1 dependent) ===
+            if (G.ACT_PHASE) {
+                int[] killHood = MooreHood(true);
+                int neighbors = MapOccupiedHood(killHood);
+
+                for (int j = 0; j < neighbors; j++) {
+                    agentLattice target = G.GetAgent(killHood[j]);
+
+                    if (target != null && target.type == Tumor) {
+
+                        // Same sigmoid as active T cells
+                        double suppressionProb =
+                                1.0 / (1.0 + Math.exp(-0.7 * (this.pd_1 - 10.0)));
+                        double killSuccessProb = 1.0 - suppressionProb;
+
+                        // Alloreactivity is rare — cap maximum kill chance regardless of PD-1
+                        double ALLO_MAX = 0.02;
+                        killSuccessProb = Math.min(killSuccessProb, ALLO_MAX);
+
+                        if (G.rn.Double() < killSuccessProb) {
+                            target.Tcell_Kill();
+
+                            // PD-1 accumulates on kill, same as active
+                            this.pd_1 += 1.0;
+
+                            // Optional: transition to active if they're killing
+                            // this.type = activeTcell;
+                            // this.SetCellColor();
+                        }
+                        break; // one attempt per step regardless of outcome
+                    }
+                }
+            }
+
             double inactiveDivProb = 0.0;
 
             if (G.daysSinceTumorKill <= 3) {
@@ -937,6 +972,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                 }
             }
         }
+
         if (type == exhaustedTcells) {
             double rn_BirthDeath = G.rn.Double();
             double deathRate = G.T_CELL_DEATH_RATE;
@@ -1025,6 +1061,10 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
 
                         double killSuccessProb = 1.0 - suppressionProb;
 
+//                        if (G.ACT_PHASE) {
+//                            killSuccessProb = Math.min(1.0, killSuccessProb * 2.0);
+//                        }
+
                         boolean canKill = false;
 
                         if (G.rn.Double() < killSuccessProb) {
@@ -1062,7 +1102,18 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                             if (emptyNeighbors > 0 &&
                                     this.hours_since_division >= 5) {
 
-                                double divProbScale = 0.1;
+                                double divProbScale;
+
+                                if (G.ACT_PHASE) {
+
+                                    // in vivo / ACT phase
+                                    divProbScale = 0.1;
+
+                                } else {
+
+                                    // in vitro phase
+                                    divProbScale = 0.10;
+                                }
 
                                 if (G.rn.Double() < divProbScale) {
 
@@ -1142,7 +1193,7 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
             if (G.ACT_PHASE) {
 
                 // in vivo ACT tumors proliferate
-                adjusted_prolif_prob = 0.0; //1.0 / 72.0;
+                adjusted_prolif_prob = 1.0 / 72.0;
 
             } else {
 
