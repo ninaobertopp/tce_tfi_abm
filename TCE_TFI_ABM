@@ -46,8 +46,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // The matching entry in TCE_Duration defines how long TCE remains on.
 //
 // Example shown: TFI_7 schedule (7 days on, 7 days off, repeated)
-    double[] TCE_start = {1, 15};      // TCE on during Days 1–7 and 15–21
-    double[] TCE_Duration = {7, 7};    // each treatment period lasts 7 days
+    double[] TCE_start = {1};      // TCE on during Days 1–7 and 15–21
+    double[] TCE_Duration = {28};    // each treatment period lasts 7 days
 
     /* Alternative schedules:
 
@@ -503,7 +503,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
         java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_SS");
         java.util.Date now = new java.util.Date();
         String date_time = dateFormat.format(now);
-        int N_RUNS = 50; // number of stochastic replicates
+        int N_RUNS = 10; // number of stochastic replicates
 
         double totalTime = 0;
         double minTime = Double.MAX_VALUE;
@@ -654,7 +654,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     // SEED FRESH TUMORS
                     /////////////////////////////////////////////////////////
 
-                    transferGrid.SeedFreshTumors(200);
+                    transferGrid.SeedFreshTumors(1000);
 
                     transferGrid.InjectTransferredTcells(
                             transferredCells,
@@ -906,33 +906,15 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                 return;
             }
 
-            // === Alloreactive killing during ACT phase (PD-1 dependent) ===
-            if (G.ACT_PHASE) {
-                int[] killHood = MooreHood(true);
-                int neighbors = MapOccupiedHood(killHood);
-                for (int j = 0; j < neighbors; j++) {
-                    agentLattice target = G.GetAgent(killHood[j]);
-                    if (target != null && target.type == Tumor) {
-                        // Same sigmoid as active T cells — boosted for in vivo lysis sensitivity
-                        double suppressionProb =
-                                1.0 / (1.0 + Math.exp(-0.7 * (this.pd_1 - 10.0)));
-                        double killSuccessProb = Math.min(1.0, (1.0 - suppressionProb) * 2.0);
-
-                        // Alloreactivity is rare — cap maximum kill chance regardless of PD-1
-                        double ALLO_MAX = 0.02;
-                        killSuccessProb = Math.min(killSuccessProb, ALLO_MAX);
-
-                        if (G.rn.Double() < killSuccessProb) {
-                            target.Tcell_Kill();
-
-                            // PD-1 accumulates on kill, same as active
-                            this.pd_1 += 1.0;
-
-                            // transition to active if they're killing
-                            this.type = activeTcell;
-                            this.SetCellColor();
-                        }
-                        break; // one attempt per step regardless of outcome
+            // Each T cell performs up to x movement/interaction attempts per timestep
+            for (int attempt = 0; attempt < moveAttempts; attempt++) {
+                int[] movdivHood = MooreHood(true); // for division and movement
+                int emptyNeighbors = MapEmptyHood(movdivHood); // mapping empty spots
+                if (emptyNeighbors > 0) {
+                    int chosenIndex = G.rn.Int(emptyNeighbors); // Randomly choose an empty cell index
+                    int chosenCell = movdivHood[chosenIndex]; // Get the chosen empty cell
+                    if (G.GetAgent(chosenCell) == null) { // Check if the chosen cell is still empty
+                        MoveSQ(chosenCell);
                     }
                 }
             }
@@ -959,15 +941,35 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                     }
                 }
             }
-// Each T cell performs up to x movement/interaction attempts per timestep
-            for (int attempt = 0; attempt < moveAttempts; attempt++) {
-                int[] movdivHood = MooreHood(true); // for division and movement
-                int emptyNeighbors = MapEmptyHood(movdivHood); // mapping empty spots
-                if (emptyNeighbors > 0) {
-                    int chosenIndex = G.rn.Int(emptyNeighbors); // Randomly choose an empty cell index
-                    int chosenCell = movdivHood[chosenIndex]; // Get the chosen empty cell
-                    if (G.GetAgent(chosenCell) == null) { // Check if the chosen cell is still empty
-                        MoveSQ(chosenCell);
+
+            // TCE-independent T-cell recognition of PDX-ALL-265 leukemia cells
+            if (G.ACT_PHASE) {
+                int[] killHood = MooreHood(true);
+                int neighbors = MapOccupiedHood(killHood);
+                for (int j = 0; j < neighbors; j++) {
+                    agentLattice target = G.GetAgent(killHood[j]);
+                    if (target != null && target.type == Tumor) {
+                        // Same sigmoid as active T cells — boosted for in vivo lysis sensitivity
+                        double suppressionProb =
+                                1.0 / (1.0 + Math.exp(-0.7 * (this.pd_1 - 10.0)));
+                        double killSuccessProb = Math.min(1.0, (1.0 - suppressionProb) * 2.0);
+
+                        // Maximum probability of TCE-independent tumor killing by transferred T cells with endogenous anti-leukemia TCR reactivity
+                        double TCR_KILL_MAX = 0.05;
+                        killSuccessProb = Math.min(killSuccessProb, TCR_KILL_MAX);
+
+                        if (G.rn.Double() < killSuccessProb) {
+                            target.Tcell_Kill();
+
+                            // PD-1 accumulates on kill, same as active
+                            this.pd_1 += 1.0;
+
+                            // transition to active if they're killing
+                            this.type = activeTcell;
+                            this.SetCellColor();
+                            return;
+                        }
+                        break; // one attempt per step regardless of outcome
                     }
                 }
             }
@@ -979,11 +981,6 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
             double deathProb = ProbScale(deathRate, 1);  // Calculate probability
 
 
-            if (rn_BirthDeath < deathProb) {  // Check if cell should die
-                this.Dispose();
-                return;
-            }
-
             for (int attempt = 0; attempt < moveAttempts; attempt++) {
                 int[] movdivHood = MooreHood(true); // for division and movement
                 int emptyNeighbors = MapEmptyHood(movdivHood); // mapping empty spots
@@ -994,6 +991,11 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
                         MoveSQ(chosenCell);
                     }
                 }
+            }
+
+            if (rn_BirthDeath < deathProb) {  // Check if cell should die
+                this.Dispose();
+                return;
             }
 
             //Define the percentage of cells to turn into active T cells
