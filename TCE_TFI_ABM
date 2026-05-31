@@ -18,9 +18,9 @@ import java.util.ArrayList;
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
     public static final double STEPS = (28 * 24.0);
-    public static boolean VISUALS = true; // turns visual output on/off
+    public static boolean VISUALS = false; // turns visual output on/off
     // Set to true to run in vitro phase only (no ACT transfer)
-    public static boolean IN_VITRO_ONLY = true;
+    public static boolean IN_VITRO_ONLY = false;
 
     public static final int activeTcell = 1;      // active CD8 T cells
     public static final int exhaustedTcells = 4;  // exhausted CD8 T cells
@@ -50,8 +50,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // The matching entry in TCE_Duration defines how long TCE remains on.
 //
 // Example shown: TFI_7 schedule (7 days on, 7 days off, repeated)
-    double[] TCE_start = {1};      // TCE on during Days 1–7 and 15–21
-    double[] TCE_Duration = {28};    // each treatment period lasts 7 days
+    double[] TCE_start = {1, 15};      // TCE on during Days 1–7 and 15–21
+    double[] TCE_Duration = {7, 7};    // each treatment period lasts 7 days
 
     /* Alternative schedules:
 
@@ -720,7 +720,6 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                             /////////////////////////////////////////////////////////
                             // VISUALIZATION
                             /////////////////////////////////////////////////////////
-
                             if (VISUALS) {
 
                                 transferGrid.Draw(Cell_vis);
@@ -766,6 +765,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                         break;
                     }
+                    day += 1;
+                    continue;
                 }
 
 
@@ -804,6 +805,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                     day += 1;
                 }
             }
+            g.output.Close(); // flush output to disk
         }
     }
 }
