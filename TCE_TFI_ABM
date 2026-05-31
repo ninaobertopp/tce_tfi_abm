@@ -17,8 +17,10 @@ import java.util.ArrayList;
 //////////////
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
-    public static final double STEPS = (23 * 24.0);
-    public static boolean VISUALS = false; // turns visual output on/off
+    public static final double STEPS = (28 * 24.0);
+    public static boolean VISUALS = true; // turns visual output on/off
+    // Set to true to run in vitro phase only (no ACT transfer)
+    public static boolean IN_VITRO_ONLY = true;
 
     public static final int activeTcell = 1;      // active CD8 T cells
     public static final int exhaustedTcells = 4;  // exhausted CD8 T cells
@@ -40,6 +42,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     boolean TCE_ON; // indicates whether TCE therapy is currently active
 
     boolean ACT_PHASE = false;
+
+
 
     // TCE dosing schedule defined by start days and duration (in days)
 // Each entry in TCE_start corresponds to one treatment-on period.
@@ -596,171 +600,174 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                     g.daysSinceTumorKill++;
 
-                    /////////////////////////////////////////////////////////
-                    // HARVEST T CELLS
-                    /////////////////////////////////////////////////////////
+                    if (!IN_VITRO_ONLY) {
+                        /////////////////////////////////////////////////////////
+                        // HARVEST T CELLS
+                        /////////////////////////////////////////////////////////
 
-                    ArrayList<TcellState> transferredCells =
-                            g.HarvestTcells();
+                        ArrayList<TcellState> transferredCells =
+                                g.HarvestTcells();
 
-                    System.out.println(
-                            "Harvested T cells = " +
-                                    transferredCells.size()
-                    );
+                        System.out.println(
+                                "Harvested T cells = " +
+                                        transferredCells.size()
+                        );
 
-                    /////////////////////////////////////////////////////////
-                    // WRITE TRANSFERRED T CELL PHENOTYPES
-                    /////////////////////////////////////////////////////////
+                        /////////////////////////////////////////////////////////
+                        // WRITE TRANSFERRED T CELL PHENOTYPES
+                        /////////////////////////////////////////////////////////
 
-                    String ACTCellFile =
-                            setting_dir +
-                                    "ACTcells_" +
-                                    date_time +
-                                    "_Day" +
-                                    (int) day +
-                                    "_rep" + run + ".csv";
+                        String ACTCellFile =
+                                setting_dir +
+                                        "ACTcells_" +
+                                        date_time +
+                                        "_Day" +
+                                        (int) day +
+                                        "_rep" + run + ".csv";
 
-                    FileIO ACTcellOutput =
-                            new FileIO(ACTCellFile, "w");
+                        FileIO ACTcellOutput =
+                                new FileIO(ACTCellFile, "w");
 
-                    ACTcellOutput.Write(
-                            "CellID,Type,PD1,TcellAge," +
-                                    "HoursSinceActivation," +
-                                    "HoursSinceDivision," +
-                                    "HoursSinceKill\n"
-                    );
+                        ACTcellOutput.Write(
+                                "CellID,Type,PD1,TcellAge," +
+                                        "HoursSinceActivation," +
+                                        "HoursSinceDivision," +
+                                        "HoursSinceKill\n"
+                        );
 
-                    /////////////////////////////////////////////////////////
-                    // CREATE NEW TRANSFER GRID
-                    /////////////////////////////////////////////////////////
+                        /////////////////////////////////////////////////////////
+                        // CREATE NEW TRANSFER GRID
+                        /////////////////////////////////////////////////////////
 
-                    String newOutputFile =
-                            setting_dir +
-                                    "ACT_" +
-                                    date_time +
-                                    "_Day" +
-                                    (int) day +
-                                    "_rep" + run + ".csv";
+                        String newOutputFile =
+                                setting_dir +
+                                        "ACT_" +
+                                        date_time +
+                                        "_Day" +
+                                        (int) day +
+                                        "_rep" + run + ".csv";
 
-                    gridLattice transferGrid =
-                            new gridLattice(
-                                    xDim,
-                                    yDim,
-                                    newOutputFile,
-                                    runRNG
-                            );
+                        gridLattice transferGrid =
+                                new gridLattice(
+                                        xDim,
+                                        yDim,
+                                        newOutputFile,
+                                        runRNG
+                                );
 
-                    /////////////////////////////////////////////////////////
-                    // SEED FRESH TUMORS
-                    /////////////////////////////////////////////////////////
+                        /////////////////////////////////////////////////////////
+                        // SEED FRESH TUMORS
+                        /////////////////////////////////////////////////////////
 
-                    transferGrid.SeedFreshTumors(1000);
+                        transferGrid.SeedFreshTumors(1000);
 
-                    transferGrid.InjectTransferredTcells(
-                            transferredCells,
-                            //200, //sepcify amount of T cells
-                            transferredCells.size(), // all T cells
-                            ACTcellOutput
-                    );
+                        transferGrid.InjectTransferredTcells(
+                                transferredCells,
+                                //200, //sepcify amount of T cells
+                                transferredCells.size(), // all T cells
+                                ACTcellOutput
+                        );
 
-                    ACTcellOutput.Close();
+                        ACTcellOutput.Close();
 
-                    // Record Day 0 before any biology
-                    double[] day0Counts = transferGrid.CellCounts();
-                    transferGrid.RecordOut(transferGrid.output, 0, day0Counts, false);
+                        // Record Day 0 before any biology
+                        double[] day0Counts = transferGrid.CellCounts();
+                        transferGrid.RecordOut(transferGrid.output, 0, day0Counts, false);
 
-                    System.out.println(
-                            "Fresh tumors seeded into transfer grid"
-                    );
+                        System.out.println(
+                                "Fresh tumors seeded into transfer grid"
+                        );
 
 /////////////////////////////////////////////////////////
 // RUN TRANSFER SIMULATION
 /////////////////////////////////////////////////////////
 
-                    for (int t = 0; t < 21 * 24; t++) {
+                        for (int t = 0; t < 21 * 24; t++) {
 
-                        /////////////////////////////////////////////////////////
-                        // DEFINE ACT DAY FROM TIMESTEP
-                        /////////////////////////////////////////////////////////
+                            /////////////////////////////////////////////////////////
+                            // DEFINE ACT DAY FROM TIMESTEP
+                            /////////////////////////////////////////////////////////
 
-                        int ACT_Day = (t / 24) + 1;
+                            int ACT_Day = (t / 24) + 1;
 
-                        /////////////////////////////////////////////////////////
-                        // TCE SCHEDULE DURING ACT PHASE
-                        /////////////////////////////////////////////////////////
+                            /////////////////////////////////////////////////////////
+                            // TCE SCHEDULE DURING ACT PHASE
+                            /////////////////////////////////////////////////////////
 
-                        transferGrid.TCE_ON =
-                                (ACT_Day == 2 || ACT_Day == 9);
+                            transferGrid.TCE_ON =
+                                    (ACT_Day == 2 || ACT_Day == 9);
 
-                        /////////////////////////////////////////////////////////
-                        // UPDATE GUI LABELS AT START OF DAY
-                        /////////////////////////////////////////////////////////
+                            /////////////////////////////////////////////////////////
+                            // UPDATE GUI LABELS AT START OF DAY
+                            /////////////////////////////////////////////////////////
 
-                        if (t % 24 == 0) {
+                            if (t % 24 == 0) {
 
-                            dayLabel.SetText(
-                                    "ACT Day: " + ACT_Day
-                            );
+                                dayLabel.SetText(
+                                        "ACT Day: " + ACT_Day
+                                );
 
-                            if (transferGrid.TCE_ON) {
+                                if (transferGrid.TCE_ON) {
 
-                                tceLabel.SetText("TCE: ON");
+                                    tceLabel.SetText("TCE: ON");
 
-                            } else {
+                                } else {
 
-                                tceLabel.SetText("TCE: OFF");
+                                    tceLabel.SetText("TCE: OFF");
+                                }
+                            }
+
+                            /////////////////////////////////////////////////////////
+                            // VISUALIZATION
+                            /////////////////////////////////////////////////////////
+
+                            if (VISUALS) {
+
+                                transferGrid.Draw(Cell_vis);
+
+                                win.TickPause(100);
+                            }
+
+                            /////////////////////////////////////////////////////////
+                            // APPLY BIOLOGY
+                            /////////////////////////////////////////////////////////
+
+                            transferGrid.ModelStep(t, ACT_Day);
+
+                            /////////////////////////////////////////////////////////
+                            // END-OF-DAY OUTPUT
+                            // (matches in vitro logic)
+                            /////////////////////////////////////////////////////////
+
+                            if (t % 24 == 0) {
+
+                                double[] transferCounts =
+                                        transferGrid.CellCounts();
+
+                                System.out.println("ACT Phase");
+
+                                transferGrid.PrintDailyStatus(ACT_Day);
+
+                                transferGrid.RecordOut(
+                                        transferGrid.output,
+                                        ACT_Day,
+                                        transferCounts,
+                                        transferGrid.TCE_ON
+                                );
+
+                                // increment AFTER printing
+                                // so next day reflects elapsed time
+
+                                transferGrid.daysSinceTumorKill++;
                             }
                         }
 
-                        /////////////////////////////////////////////////////////
-                        // VISUALIZATION
-                        /////////////////////////////////////////////////////////
+                        transferGrid.output.Close();
 
-                        if (VISUALS) {
-
-                            transferGrid.Draw(Cell_vis);
-
-                            win.TickPause(100);
-                        }
-
-                        /////////////////////////////////////////////////////////
-                        // APPLY BIOLOGY
-                        /////////////////////////////////////////////////////////
-
-                        transferGrid.ModelStep(t, ACT_Day);
-
-                        /////////////////////////////////////////////////////////
-                        // END-OF-DAY OUTPUT
-                        // (matches in vitro logic)
-                        /////////////////////////////////////////////////////////
-
-                        if (t % 24 == 0) {
-
-                            double[] transferCounts =
-                                    transferGrid.CellCounts();
-
-                            System.out.println("ACT Phase");
-
-                            transferGrid.PrintDailyStatus(ACT_Day);
-
-                            transferGrid.RecordOut(
-                                    transferGrid.output,
-                                    ACT_Day,
-                                    transferCounts,
-                                    transferGrid.TCE_ON
-                            );
-
-                            // increment AFTER printing
-                            // so next day reflects elapsed time
-
-                            transferGrid.daysSinceTumorKill++;
-                        }
+                        break;
                     }
-
-                    transferGrid.output.Close();
-
-                    break;
                 }
+
 
 // GRAPHICAL OUTPUT
                 if (VISUALS) {
