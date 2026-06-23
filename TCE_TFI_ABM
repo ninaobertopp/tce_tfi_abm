@@ -17,10 +17,10 @@ import java.util.ArrayList;
 //////////////
 class gridLattice extends AgentGrid2D<agentLattice> {
     public static int timeStep = 0; // initial timestep
-    public static final double STEPS = (28 * 24.0);
+    public static final double STEPS = (30 * 24.0);
     public static boolean VISUALS = false; // turns visual output on/off
     // Set to true to run in vitro phase only (no ACT transfer)
-    public static boolean IN_VITRO_ONLY = true;
+    public static boolean IN_VITRO_ONLY = false;
 
     public static final int activeTcell = 1;      // active CD8 T cells
     public static final int exhaustedTcells = 4;  // exhausted CD8 T cells
@@ -37,7 +37,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     // assuming exponential decay: survival = exp(-r * t) → r ≈ 0.00213 h⁻¹
     // Based on in vitro CD8⁺ T cell survival kinetics:
     // Hedfors & Brinchmann, Scand J Immunol (2003)
-    public double T_CELL_DEATH_RATE = 1.0 / 72.0; //0.00213;
+    public double p_death_exh = 1.0 / 72.0; //0.00213;
 
     boolean TCE_ON; // indicates whether TCE therapy is currently active
 
@@ -50,8 +50,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // The matching entry in TCE_Duration defines how long TCE remains on.
 //
 // Example shown: TFI_7 schedule (7 days on, 7 days off, repeated)
-    double[] TCE_start = {1, 15};      // TCE on during Days 1–7 and 15–21
-    double[] TCE_Duration = {7, 7};    // each treatment period lasts 7 days
+    double[] TCE_start = {1, 11};      // TCE on during Days 1–7 and 15–21
+    double[] TCE_Duration = {5, 5};    // each treatment period lasts 7 days
 
     /* Alternative schedules:
 
@@ -502,40 +502,72 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     //MAIN//
     ////////
     public static void main(String[] args) throws IOException {
-        //TIME STAMP
-        String simLabel = "TCE_TFI";
-        java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_SS");
+        // SCHEDULE LABEL — change this per run
+        String simLabel = "TFI_5";
+        java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_ss");
         java.util.Date now = new java.util.Date();
         String date_time = dateFormat.format(now);
-        int N_RUNS = 100; // number of stochastic replicates
-
-        double totalTime = 0;
-        double minTime = Double.MAX_VALUE;
-        double maxTime = 0;
+        int N_RUNS = 50;
 
         for (int run = 0; run < N_RUNS; run++) {
             // LOG SEED
             System.out.println("=== RUN " + run + " | SEED: " + run + " ===");
             long runStart = System.nanoTime();  // START TIMER
             double day = 1;
-            String save = "";
-            String VASC_ARCH_PATH = "";
-            //GridWindow win = null;
             int xDim = 160;
             int yDim = 150;
             double TIMESTEPS = STEPS;
 
             // PATHS
-            String projPath = "TCE_TFI"; // place project path here
-            String setting_dir = projPath + VASC_ARCH_PATH + save + "/output/" + "/" + date_time + "/";
+            String projPath = "TCE_TFI";
+            String setting_dir = projPath + "/output/" + simLabel + "_" + date_time + "/";
             // CREATE OUTPUT DIR
             new File(setting_dir).mkdirs();
-            String outputFilename = simLabel + "_" + date_time + "_rep" + run + ".csv";
+            String outputFilename = simLabel + "_rep" + run + ".csv";
             String path_to_output_file = setting_dir + outputFilename;
 
             // per-replicate frame folder for daily PNGs
             String frameDir = setting_dir + String.format("frames_rep%02d/", run);
             new File(frameDir).mkdirs();
+
+//         ─────────────────────────────────────────────────
+//         SENSITIVITY SETTINGS — change these per run
+//         ─────────────────────────────────────────────────
+//        String PARAM_NAME  = "KILL_BOOST";
+//        String PARAM_LEVEL = "high";
+//        String SCHEDULE    = "CONT";
+//
+//        String date_time = "sensitivity_run"; // dummy, only used in ACT phase
+//        String projPath = "sensitivity";      // dummy, only used in GifMaker
+//        // ─────────────────────────────────────────────────
+//
+//        String simLabel = "TCE_TFI";
+//        int N_RUNS = 10;
+//
+//
+//        // Output directory
+//        // NEW
+//        String setting_dir = "output/sensitivity_ACT/" + PARAM_NAME + "/" + PARAM_LEVEL + "/" + SCHEDULE + "/";
+//        new File(setting_dir).mkdirs();
+//
+//        for (int run = 0; run < N_RUNS; run++) {
+//
+//            System.out.println("=== RUN " + run + " | SEED: " + run + " ===");
+//            long runStart = System.nanoTime();
+//
+//            double day = 1;
+//            int xDim = 160;
+//            int yDim = 150;
+//            double TIMESTEPS = STEPS;
+//
+//            String outputFilename = simLabel + "_" + PARAM_NAME + "_" + PARAM_LEVEL + "_" + SCHEDULE + "_rep" + run + ".csv";
+//            String path_to_output_file = setting_dir + outputFilename;
+//
+////             frame folder per replicate (only used if VISUALS = true)
+//            String frameDir = setting_dir + String.format("frames_rep%02d/", run);
+//            if (VISUALS) {
+//                new File(frameDir).mkdirs();
+//            }
 
             // OUTPUT WINDOW
             UIGrid Cell_vis = new UIGrid(xDim, yDim, 4, 2, 5);
@@ -600,6 +632,15 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                     g.daysSinceTumorKill++;
 
+                    if (VISUALS) {
+
+                        String pngPath =
+                                frameDir +
+                                        String.format("day_%02d.png", (int) day);
+
+                        g.savePNG(pngPath, 4);
+                    }
+
                     if (!IN_VITRO_ONLY) {
                         /////////////////////////////////////////////////////////
                         // HARVEST T CELLS
@@ -662,9 +703,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                         transferGrid.SeedFreshTumors(1000);
 
                         transferGrid.InjectTransferredTcells(
-                                transferredCells,
-                                //200, //sepcify amount of T cells
-                                transferredCells.size(), // all T cells
+                                transferredCells, 200, //sepcify amount of T cells
+                                //transferredCells.size(), // all T cells
                                 ACTcellOutput
                         );
 
@@ -682,7 +722,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // RUN TRANSFER SIMULATION
 /////////////////////////////////////////////////////////
 
-                        for (int t = 0; t < 21 * 24; t++) {
+                        for (int t = 0; t < 16 * 24; t++) {
 
                             /////////////////////////////////////////////////////////
                             // DEFINE ACT DAY FROM TIMESTEP
@@ -716,6 +756,13 @@ class gridLattice extends AgentGrid2D<agentLattice> {
                                     tceLabel.SetText("TCE: OFF");
                                 }
                             }
+
+                            /////////////////////////////////////////////////////////
+                            // TCE SCHEDULE DURING ACT PHASE
+                            /////////////////////////////////////////////////////////
+
+                            transferGrid.TCE_ON =
+                                    (ACT_Day == 2 || ACT_Day == 9);
 
                             /////////////////////////////////////////////////////////
                             // VISUALIZATION
@@ -791,15 +838,9 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 
                     g.daysSinceTumorKill++;
 
-//    String pngPath = frameDir + String.format("day_%02d.png", (int) day);
-//    g.savePNG(pngPath, 4);
-
                     if (VISUALS) {
 
-                        String pngPath =
-                                frameDir +
-                                        String.format("day_%02d.png", (int) day);
-
+                        String pngPath = frameDir + String.format("day_%02d.png", (int) day);
                         g.savePNG(pngPath, 4);
                     }
                     day += 1;
@@ -902,9 +943,8 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
 
 
     void CellStep() {
-        // Movement attempts scale with environment:
-        // more attempts in vivo (ACT phase) to reflect circulatory transport
-        int moveAttempts = G.ACT_PHASE ? 6 : 3;
+
+        int moveAttempts = 3;
 
         if (type == inactiveTcell) {
             this.tcellAge += 1;
@@ -952,41 +992,41 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
             }
 
             // TCE-independent T-cell recognition of PDX-ALL-265 leukemia cells
-            if (G.ACT_PHASE) {
-                int[] killHood = MooreHood(true);
-                int neighbors = MapOccupiedHood(killHood);
-                for (int j = 0; j < neighbors; j++) {
-                    agentLattice target = G.GetAgent(killHood[j]);
-                    if (target != null && target.type == Tumor) {
-                        // Same sigmoid as active T cells — boosted for in vivo lysis sensitivity
-                        double suppressionProb =
-                                1.0 / (1.0 + Math.exp(-0.7 * (this.pd_1 - 10.0)));
-                        double killSuccessProb = Math.min(1.0, (1.0 - suppressionProb) * 2.0);
-
-                        // Maximum probability of TCE-independent tumor killing by transferred T cells with endogenous anti-leukemia TCR reactivity
-                        double TCR_KILL_MAX = 0.05;
-                        killSuccessProb = Math.min(killSuccessProb, TCR_KILL_MAX);
-
-                        if (G.rn.Double() < killSuccessProb) {
-                            target.Tcell_Kill();
-
-                            // PD-1 accumulates on kill, same as active
-                            this.pd_1 += 1.0;
-
-                            // transition to active if they're killing
-                            this.type = activeTcell;
-                            this.SetCellColor();
-                            return;
-                        }
-                        break; // one attempt per step regardless of outcome
-                    }
-                }
-            }
+//            if (G.ACT_PHASE) {
+//                int[] killHood = MooreHood(true);
+//                int neighbors = MapOccupiedHood(killHood);
+//                for (int j = 0; j < neighbors; j++) {
+//                    agentLattice target = G.GetAgent(killHood[j]);
+//                    if (target != null && target.type == Tumor) {
+//                        // Same sigmoid as active T cells — boosted for in vivo lysis sensitivity
+//                        double suppressionProb =
+//                                1.0 / (1.0 + Math.exp(-0.7 * (this.pd_1 - 10.0)));
+//                        double killSuccessProb = Math.min(1.0, (1.0 - suppressionProb) * 2.0);
+//
+//                        // Maximum probability of TCE-independent tumor killing by transferred T cells with endogenous anti-leukemia TCR reactivity
+//                        double TCR_KILL_MAX = 0.05;
+//                        killSuccessProb = Math.min(killSuccessProb, TCR_KILL_MAX);
+//
+//                        if (G.rn.Double() < killSuccessProb) {
+//                            target.Tcell_Kill();
+//
+//                            // PD-1 accumulates on kill, same as active
+//                            this.pd_1 += 1.0;
+//
+//                            // transition to active if they're killing
+//                            this.type = activeTcell;
+//                            this.SetCellColor();
+//                            return;
+//                        }
+//                        break; // one attempt per step regardless of outcome
+//                    }
+//                }
+//            }
         }
 
         if (type == exhaustedTcells) {
             double rn_BirthDeath = G.rn.Double();
-            double deathRate = G.T_CELL_DEATH_RATE;
+            double deathRate = G.p_death_exh;
             double deathProb = ProbScale(deathRate, 1);  // Calculate probability
 
 
@@ -1008,11 +1048,11 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
             }
 
             //Define the percentage of cells to turn into active T cells
-            double activationProbability = 0.0005; // low probability of exhausted-to-active reactivation under TCE
+            double p_react = 0.0005; // low probability of exhausted-to-active reactivation under TCE
             if (G.TCE_ON) {
                 // Generate a random number between 0 and 1
                 // Only turn into activeTcell if the random number is less than the activationProbability
-                if (G.rn.Double() < activationProbability) {
+                if (G.rn.Double() < p_react) {
                     this.type = activeTcell;
                     this.SetCellColor(); // Update cell color after type change
                     this.pd_1 = this.pd_1 * 0.5;
@@ -1197,20 +1237,6 @@ class agentLattice extends AgentSQ2Dunstackable<gridLattice> {
         }
 
         if (type == Tumor) {
-
-//            if (G.ACT_PHASE) {
-//                // ALL blasts are motile in vivo
-//                for (int attempt = 0; attempt < moveAttempts; attempt++) {
-//                    int[] movHood = MooreHood(true);
-//                    int emptyNeighbors = MapEmptyHood(movHood);
-//                    if (emptyNeighbors > 0) {
-//                        int chosenCell = movHood[G.rn.Int(emptyNeighbors)];
-//                        if (G.GetAgent(chosenCell) == null) {
-//                            MoveSQ(chosenCell);
-//                        }
-//                    }
-//                }
-//            }
 
             double adjusted_prolif_prob;
 
