@@ -1,0 +1,475 @@
+package TCE_TFI;
+import HAL.GridsAndAgents.AgentGrid2D;
+import HAL.GridsAndAgents.AgentSQ2Dunstackable;
+import HAL.Gui.*;
+import HAL.Rand;
+import HAL.Tools.FileIO;
+import java.io.File;
+import java.io.IOException;
+import static TCE_TFI.gridLatticeInVivo.*;
+import static HAL.Util.*;
+
+//////////////
+// GRID CLASS
+//////////////
+class gridLatticeInVivo extends AgentGrid2D<agentLatticeInVivo> {
+
+    public static int timeStep = 0;
+    public static final double STEPS = (28 * 24.0); // 28-day simulation
+    public static boolean VISUALS = false;
+
+    public static final int activeTcell    = 1;
+    public static final int exhaustedTcells = 4;
+    public static final int Tumor          = 2;
+    public static final int inactiveTcell  = 6;
+
+    public double cached_CD8_TIL_count = 0;
+    public int totalTumorCells = 0;
+    public int daysSinceTumorKill = 4;
+
+    public double p_death_exh = 1.0 / 72.0;
+
+    boolean TCE_ON = false;
+
+    // ==========================================
+    // TCE SCHEDULE — change per run
+    // ==========================================
+    // CONT
+    double[] TCE_start    = {1};
+    double[] TCE_Duration = {28};
+
+    /* Alternative schedules:
+
+    // TFI_7
+    TCE_start    = {1, 15};
+    TCE_Duration = {7, 7};
+
+    // TFI_7_offFirst
+    TCE_start    = {8, 22};
+    TCE_Duration = {7, 7};
+
+    // TFI_5
+    TCE_start    = {1, 11, 21};
+    TCE_Duration = {5, 5, 5};
+
+    // TFI_3
+    TCE_start    = {1, 7, 13, 19, 25};
+    TCE_Duration = {3, 3, 3, 3, 3};
+
+    // TFI_2
+    TCE_start    = {1, 5, 9, 13, 17, 21, 25};
+    TCE_Duration = {2, 2, 2, 2, 2, 2, 2};
+
+    // MO_FR (5 on / 2 off)
+    TCE_start    = {1, 8, 15, 22};
+    TCE_Duration = {5, 5, 5, 5};
+
+    // TFI_1on13off
+    TCE_start    = {1, 15};
+    TCE_Duration = {1, 1};
+
+    */
+
+    public Rand rn = new Rand();
+    FileIO output;
+
+    ////////////////////
+    // GRID CONSTRUCTOR
+    ////////////////////
+    public gridLatticeInVivo(int xDim, int yDim, String outFileName, Rand rng, int seed) {
+        super(xDim, yDim, agentLatticeInVivo.class, true, true);
+        this.rn = rng;
+        output = new FileIO(outFileName, "w");
+        output.Write("Seed," + seed + "\n");
+        output.Write("Day,Total_CD8_TILs,Total_Tumor,Active_CD8_Tcells,Exhausted_CD8_Tcells,Inactive_CD8_Tcells,%_Exhausted_CD8_Tcells,TCE_ON\n");
+
+        // Start with 1000 tumor cells and 200 T cells
+        // matching the ACT phase initial conditions
+        int numTumorCells = 1000;
+        int numTCells = 200;
+
+        for (int i = 0; i < numTumorCells; i++) {
+            int x, y;
+            do {
+                x = rn.Int(xDim);
+                y = rn.Int(yDim);
+            } while (PopAt(x, y) > 0);
+            agentLatticeInVivo c = NewAgentSQ(x, y);
+            c.type = Tumor;
+            c.SetCellColor();
+            totalTumorCells++;
+        }
+
+        // All T cells start inactive
+        for (int i = 0; i < numTCells; i++) {
+            int x, y;
+            do {
+                x = rn.Int(xDim);
+                y = rn.Int(yDim);
+            } while (PopAt(x, y) > 0);
+            agentLatticeInVivo c = NewAgentSQ(x, y);
+            c.type = inactiveTcell;
+            c.SetCellColor();
+        }
+    }
+
+    ////////////////
+    // GRID METHODS
+    ////////////////
+    public void Draw(UIGrid vis) {
+        for (int x = 0; x < xDim; x++) {
+            for (int y = 0; y < yDim; y++) {
+                agentLatticeInVivo drawMe = GetAgent(x, y);
+                if (drawMe != null) {
+                    vis.SetPix(x, y, drawMe.color);
+                } else {
+                    vis.SetPix(x, y, RGB256(240, 220, 220));
+                }
+            }
+        }
+    }
+
+    public double[] CellCounts() {
+        double[] counts = new double[6];
+        for (agentLatticeInVivo c : this) {
+            if      (c.type == activeTcell)    counts[2]++;
+            else if (c.type == exhaustedTcells) counts[3]++;
+            else if (c.type == inactiveTcell)   counts[4]++;
+            else if (c.type == Tumor)           counts[1]++;
+        }
+        counts[0] = counts[2] + counts[3] + counts[4];
+        double totalT = counts[0];
+        counts[5] = (totalT > 0) ? (counts[3] / totalT) * 100.0 : 0.0;
+        return counts;
+    }
+
+    public void RecordOut(FileIO writeHere, int time, double[] cts, boolean tceOnFlag) {
+        writeHere.Write(time + ",");
+        for (int i = 0; i < cts.length; i++) {
+            writeHere.Write(String.format("%.2f", cts[i]));
+            writeHere.Write(",");
+        }
+        writeHere.Write((tceOnFlag ? "true" : "false") + "\n");
+    }
+
+    public void PrintDailyStatus(int day) {
+        System.out.println("Day " + day);
+        System.out.println("TCE_ON = " + this.TCE_ON);
+        System.out.println("Total Tumor = " + this.totalTumorCells);
+    }
+
+    public void ModelStep(double timeStep, double day) {
+        this.timeStep = (int) timeStep;
+        cached_CD8_TIL_count = CellCounts()[0];
+
+        ShuffleAgents(rn);
+        for (agentLatticeInVivo c : this) {
+            c.CellStep();
+        }
+
+        // Recalculate tumor count
+        totalTumorCells = 0;
+        for (agentLatticeInVivo c : this) {
+            if (c.type == Tumor) totalTumorCells++;
+        }
+
+        // Daily logic
+        if (timeStep % 24 == 0 && timeStep != 0) {
+
+            // T cell reversion (active -> inactive) based on AMG562 half-life decay
+            if (!TCE_ON) {
+                for (agentLatticeInVivo cell : this) {
+                    if (cell.type == activeTcell && cell.hours_since_activation >= 24) {
+                        double t_days = cell.hours_since_activation / 24.0;
+                        double t_half_days = 210.0 / 24.0;
+                        double decayProb = 1.0 - Math.exp(-Math.log(2) * t_days / t_half_days);
+                        if (rn.Double() < decayProb) {
+                            cell.type = inactiveTcell;
+                            cell.SetCellColor();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ////////
+    // MAIN
+    ////////
+    public static void main(String[] args) throws IOException {
+
+        // SCHEDULE LABEL — change this per run
+        String simLabel = "CONT_inVivo";
+        java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_ss");
+        java.util.Date now = new java.util.Date();
+        String date_time = dateFormat.format(now);
+        int N_RUNS = 50;
+
+        for (int run = 0; run < N_RUNS; run++) {
+            System.out.println("=== RUN " + run + " | SEED: " + run + " ===");
+            long runStart = System.nanoTime();
+
+            double day = 1;
+            int xDim = 160;
+            int yDim = 150;
+            double TIMESTEPS = STEPS;
+
+            String projPath = "TCE_TFI";
+            String setting_dir = projPath + "/output/" + simLabel + "_" + date_time + "/";
+            new File(setting_dir).mkdirs();
+            String outputFilename = simLabel + "_rep" + run + ".csv";
+            String path_to_output_file = setting_dir + outputFilename;
+
+            // OUTPUT WINDOW
+            UIGrid Cell_vis = new UIGrid(xDim, yDim, 4, 2, 5);
+            UIWindow win = new UIWindow("TCE_TFI_InVivo");
+            win.AddCol(0, Cell_vis);
+
+            UILabel dayLabel = new UILabel("Day: 1");
+            win.AddCol(1, dayLabel);
+
+            UILabel tceLabel = new UILabel("TCE: OFF");
+            win.AddCol(1, tceLabel);
+
+            if (VISUALS) {
+                win.RunGui();
+            }
+
+            Rand runRNG = new Rand(run);
+            gridLatticeInVivo g = new gridLatticeInVivo(xDim, yDim, path_to_output_file, runRNG, run);
+
+            // Record Day 0
+            double[] day0Counts = g.CellCounts();
+            g.RecordOut(g.output, 0, day0Counts, false);
+
+            // TIME LOOP
+            for (int i = 0; i < TIMESTEPS; i++) {
+                timeStep = i;
+
+                // Determine TCE status
+                g.TCE_ON = false;
+                for (int k = 0; k < g.TCE_start.length; k++) {
+                    if (day >= g.TCE_start[k] && day <= g.TCE_start[k] + g.TCE_Duration[k] - 1) {
+                        g.TCE_ON = true;
+                    }
+                }
+
+                if (g.TCE_ON) {
+                    tceLabel.SetText("TCE: ON");
+                } else {
+                    tceLabel.SetText("TCE: OFF");
+                }
+
+                // Count populations
+                double[] cell_count = g.CellCounts();
+
+                // Update GUI label
+                if (i % 24 == 0) {
+                    dayLabel.SetText("Day: " + (int) day);
+                }
+
+                // Apply biology
+                g.ModelStep(timeStep, day);
+
+                // Visualization
+                if (VISUALS) {
+                    g.Draw(Cell_vis);
+                    win.TickPause(100);
+                }
+
+                // End of day output
+                if (i % 24.0 == 23) {
+                    g.PrintDailyStatus((int) day);
+                    g.RecordOut(g.output, (int) day, cell_count, g.TCE_ON);
+                    g.daysSinceTumorKill++;
+                    day += 1;
+                }
+            }
+
+            g.output.Close();
+            long runEnd = System.nanoTime();
+            System.out.printf("Run %d complete in %.1f s%n", run, (runEnd - runStart) / 1e9);
+        }
+    }
+}
+
+//////////////
+// CELL CLASS
+//////////////
+class agentLatticeInVivo extends AgentSQ2Dunstackable<gridLatticeInVivo> {
+    public int type;
+    int color;
+    double pd_1 = 0;
+    double tcellAge = 0;
+    double hours_since_kill = 0;
+    public double hours_since_activation = 0;
+    public double hours_since_division = 0;
+
+    final public static int tcell        = RGB256(10, 200, 150);
+    final public static int exhausted    = RGB256(200, 50, 250);
+    final public static int cancer       = RGB256(47, 32, 66);
+    final public static int inactivetcell = RGB256(255, 165, 0);
+
+    public static int CategorialColor(int index) {
+        switch (index) {
+            case activeTcell:    return tcell;
+            case exhaustedTcells: return exhausted;
+            case Tumor:          return cancer;
+            case inactiveTcell:  return inactivetcell;
+            default: throw new IllegalArgumentException("index outside color category range: " + index);
+        }
+    }
+
+    void SetCellColor() {
+        color = CategorialColor((int) Math.round(type));
+    }
+
+    void Tcell_Kill() {
+        if (type == Tumor) {
+            if (G.totalTumorCells > 0) G.totalTumorCells--;
+        }
+        G.daysSinceTumorKill = 0;
+        this.Dispose();
+    }
+
+    void CellStep() {
+        int moveAttempts = 3;
+
+        // ==================
+        // INACTIVE T CELL
+        // ==================
+        if (type == inactiveTcell) {
+            this.tcellAge += 1;
+            if (G.TCE_ON) {
+                this.type = activeTcell;
+                this.hours_since_activation = 0;
+                this.SetCellColor();
+                return;
+            }
+            for (int attempt = 0; attempt < moveAttempts; attempt++) {
+                int[] movHood = MooreHood(true);
+                int emptyNeighbors = MapEmptyHood(movHood);
+                if (emptyNeighbors > 0) {
+                    int chosenCell = movHood[G.rn.Int(emptyNeighbors)];
+                    if (G.GetAgent(chosenCell) == null) MoveSQ(chosenCell);
+                }
+            }
+        }
+
+        // ==================
+        // EXHAUSTED T CELL
+        // ==================
+        if (type == exhaustedTcells) {
+            double rn_BirthDeath = G.rn.Double();
+            double deathProb = ProbScale(G.p_death_exh, 1);
+
+            for (int attempt = 0; attempt < moveAttempts; attempt++) {
+                int[] movHood = MooreHood(true);
+                int emptyNeighbors = MapEmptyHood(movHood);
+                if (emptyNeighbors > 0) {
+                    int chosenCell = movHood[G.rn.Int(emptyNeighbors)];
+                    if (G.GetAgent(chosenCell) == null) MoveSQ(chosenCell);
+                }
+            }
+
+            if (rn_BirthDeath < deathProb) {
+                this.Dispose();
+                return;
+            }
+
+            double p_react = 0.0005;
+            if (G.TCE_ON && G.rn.Double() < p_react) {
+                this.type = activeTcell;
+                this.pd_1 = this.pd_1 * 0.5;
+                this.SetCellColor();
+            }
+        }
+
+        // ==================
+        // ACTIVE T CELL
+        // ==================
+        if (type == activeTcell) {
+            if (G.TCE_ON) {
+                this.hours_since_activation = 0;
+            } else {
+                this.hours_since_activation += 1;
+            }
+
+            this.tcellAge += 1;
+            this.hours_since_kill += 1;
+            this.hours_since_division += 1;
+
+            for (int attempt = 0; attempt < moveAttempts; attempt++) {
+                int[] movHood = MooreHood(true);
+                int options = MapOccupiedHood(movHood);
+                int emptyNeighbors = MapEmptyHood(movHood);
+                boolean hasKilled = false;
+
+                for (int j = 0; j < options; j++) {
+                    agentLatticeInVivo target = G.GetAgent(movHood[j]);
+                    if (target != null && target.type == Tumor && this.hours_since_kill >= 12) {
+
+                        double suppressionProb = 1.0 / (1.0 + Math.exp(-0.7 * (this.pd_1 - 10.0)));
+                        double killSuccessProb = 1.0 - suppressionProb;
+
+                        if (G.rn.Double() < killSuccessProb) {
+                            target.Tcell_Kill();
+                            hasKilled = true;
+                            this.hours_since_kill = 0;
+
+                            double EXH_INCREMENT_BASE = 1.0;
+                            double EXH_TCE_FACTOR = 2.0;
+                            this.pd_1 += G.TCE_ON ? EXH_INCREMENT_BASE * EXH_TCE_FACTOR : EXH_INCREMENT_BASE;
+
+                            // T cell proliferation
+                            if (emptyNeighbors > 0 && this.hours_since_division >= 5) {
+                                if (G.rn.Double() < 1.0) { // in vivo proliferation
+                                    int chosenCell = movHood[G.rn.Int(emptyNeighbors)];
+                                    if (G.GetAgent(chosenCell) == null) {
+                                        agentLatticeInVivo child = G.NewAgentSQ(chosenCell);
+                                        child.type = activeTcell;
+                                        child.SetCellColor();
+                                        child.tcellAge = 0;
+                                        child.pd_1 = this.pd_1;
+                                        child.hours_since_division = 0;
+                                        this.hours_since_division = 0;
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (!hasKilled && emptyNeighbors > 0) {
+                    int chosenCell = movHood[G.rn.Int(emptyNeighbors)];
+                    if (G.GetAgent(chosenCell) == null) MoveSQ(chosenCell);
+                }
+
+                double exhaustionProb = 1.0 / (1.0 + Math.exp(-0.7 * (this.pd_1 - 14.0)));
+                if (G.rn.Double() < exhaustionProb) {
+                    this.type = exhaustedTcells;
+                    this.SetCellColor();
+                    break;
+                }
+            }
+        }
+
+        // ==================
+        // TUMOR CELL
+        // ==================
+        if (type == Tumor) {
+            // Tumor proliferates in vivo
+            double prolif_prob = 1.0 / 72.0;
+            if (G.rn.Double() < ProbScale(prolif_prob, 1)) {
+                int[] divHood = MooreHood(true);
+                int emptyNeighbors = MapEmptyHood(divHood);
+                if (emptyNeighbors > 0) {
+                    agentLatticeInVivo child = G.NewAgentSQ(divHood[G.rn.Int(emptyNeighbors)]);
+                    child.type = this.type;
+                    child.SetCellColor();
+                }
+            }
+        }
+    }
+}
