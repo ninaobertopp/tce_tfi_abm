@@ -16,7 +16,7 @@ class gridLatticeInVivo extends AgentGrid2D<agentLatticeInVivo> {
 
     public static int timeStep = 0;
     public static final double STEPS = (28 * 24.0); // 28-day simulation
-    public static boolean VISUALS = false;
+    public static boolean VISUALS = true;
 
     public static final int activeTcell    = 1;
     public static final int exhaustedTcells = 4;
@@ -176,12 +176,12 @@ class gridLatticeInVivo extends AgentGrid2D<agentLatticeInVivo> {
         // Daily logic
         if (timeStep % 24 == 0 && timeStep != 0) {
 
-            // T cell reversion (active -> inactive) based on AMG562 half-life decay
+            // T cell reversion (active -> inactive) based on blinatumomab half-life decay
             if (!TCE_ON) {
                 for (agentLatticeInVivo cell : this) {
                     if (cell.type == activeTcell && cell.hours_since_activation >= 24) {
                         double t_days = cell.hours_since_activation / 24.0;
-                        double t_half_days = 210.0 / 24.0;
+                        double t_half_days = 2.11 / 24.0;
                         double decayProb = 1.0 - Math.exp(-Math.log(2) * t_days / t_half_days);
                         if (rn.Double() < decayProb) {
                             cell.type = inactiveTcell;
