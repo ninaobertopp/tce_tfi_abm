@@ -50,8 +50,8 @@ class gridLattice extends AgentGrid2D<agentLattice> {
 // The matching entry in TCE_Duration defines how long TCE remains on.
 //
 // Example shown: TFI_7 schedule (7 days on, 7 days off, repeated)
-    double[] TCE_start = {1, 11};      // TCE on during Days 1–7 and 15–21
-    double[] TCE_Duration = {5, 5};    // each treatment period lasts 7 days
+    double[] TCE_start = {14};      // TCE on during Days 1–7 and 15–21
+    double[] TCE_Duration = {1};    // each treatment period lasts 7 days
 
     /* Alternative schedules:
 
@@ -503,7 +503,7 @@ class gridLattice extends AgentGrid2D<agentLattice> {
     ////////
     public static void main(String[] args) throws IOException {
         // SCHEDULE LABEL — change this per run
-        String simLabel = "TFI_5";
+        String simLabel = "TFI_13off1on";
         java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd_HH_ss");
         java.util.Date now = new java.util.Date();
         String date_time = dateFormat.format(now);
